@@ -17,6 +17,8 @@ const config = require('./config');
 const mango = require('./mango');
 const agents = require('./agents');
 const apps = require('./apps');
+const launch = require('./launch');
+const piChat = require('./pi-chat');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
@@ -167,6 +169,11 @@ const HOST = {
   demoWindow: (open) => demoWindow(Boolean(open)),
   openMenu: () => openMenu(),
   chatStatus: async () => {
+    const cfg = config.load();
+    if (cfg.chatBackend !== 'ollama') {
+      if (!fs.existsSync(piChat.PI)) return { ok: false, error: 'nopi' };
+      return { ok: true, model: String(cfg.piModel || piChat.DEFAULT_MODEL).split('/').pop() };
+    }
     const models = await refreshModels();
     const host = process.env.OLLAMA_HOST;
     if (!models) return { ok: false, error: 'offline', host };
@@ -178,7 +185,11 @@ const HOST = {
     const abort = new AbortController();
     chats.set(id, abort);
     try {
-      const text = await ollama.chat({ model: pickModel(), messages }, (piece) => emit('chat:delta', { id, text: piece }), abort.signal);
+      const cfg = config.load();
+      const onDelta = (piece) => emit('chat:delta', { id, text: piece });
+      const text = cfg.chatBackend === 'ollama'
+        ? await ollama.chat({ model: pickModel(), messages }, onDelta, abort.signal)
+        : await piChat.chat({ model: cfg.piModel || piChat.DEFAULT_MODEL, messages }, onDelta, abort.signal);
       return { ok: true, text };
     } catch (err) {
       return { ok: false, error: abort.signal.aborted ? 'stopped' : err.message };
@@ -190,6 +201,9 @@ const HOST = {
   openOllama: () => {},
   openApps: async () => (await apps.list().catch(() => [])).map(appInfo),
   findApp: async (wanted) => appInfo(await apps.find(wanted).catch(() => null)),
+  installedApps: () => launch.installed().map(({ id, name }) => ({ id, name })),
+  findInstalled: (wanted) => launch.find(wanted),
+  launchApp: (id) => launch.open(id),
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };
 

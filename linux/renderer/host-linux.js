@@ -101,6 +101,9 @@
     openOllama: () => { call('openOllama')(); },
     openApps: call('openApps'),
     findApp: call('findApp'),
+    installedApps: call('installedApps'),
+    findInstalled: call('findInstalled'),
+    launchApp: call('launchApp'),
     closeApp: (name, force) => call('closeApp')({ name, force: Boolean(force) }),
     focusOverlay: (focused) => shellPost({ type: 'keyboard', on: Boolean(focused) }),
   };

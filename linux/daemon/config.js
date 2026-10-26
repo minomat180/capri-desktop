@@ -21,7 +21,9 @@ const DEFAULTS = {
   visible: true,
   welcomed: false,
   linked: false,
-  chatModel: null,
+  chatBackend: 'pi',   // 'pi': any model pi has, with pi's logins; 'ollama': ollamaHost below
+  piModel: 'anthropic/claude-haiku-4-5', // small and quick: she chats, she doesn't code
+  chatModel: null,     // the Ollama model (null: the first one installed)
   ollamaHost: '127.0.0.1:11434', // minomat over Thunderbolt
 };
 
