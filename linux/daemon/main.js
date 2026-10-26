@@ -18,6 +18,7 @@ const mango = require('./mango');
 const agents = require('./agents');
 const apps = require('./apps');
 const launch = require('./launch');
+const media = require('./media');
 const piChat = require('./pi-chat');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
@@ -204,6 +205,8 @@ const HOST = {
   installedApps: () => launch.installed().map(({ id, name }) => ({ id, name })),
   findInstalled: (wanted) => launch.find(wanted),
   launchApp: (id) => launch.open(id),
+  media: (action) => media.control(String(action)),
+  mediaStatus: () => media.status(),
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };
 

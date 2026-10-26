@@ -104,6 +104,8 @@
     installedApps: call('installedApps'),
     findInstalled: call('findInstalled'),
     launchApp: call('launchApp'),
+    media: call('media'),
+    mediaStatus: call('mediaStatus'),
     closeApp: (name, force) => call('closeApp')({ name, force: Boolean(force) }),
     focusOverlay: (focused) => shellPost({ type: 'keyboard', on: Boolean(focused) }),
   };

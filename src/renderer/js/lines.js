@@ -62,6 +62,9 @@ export const LINES = {
       forced: '{app}: cut off clean.',
       unkillable: '{app} won’t go down. Close it yourself — it might need root, and I don’t have that.',
       notFound: 'I don’t see “{app}” open on your PC.',
+      // music (Spotify, or whatever's playing)
+      skipped: 'Next up: {track}.', back: 'Rewound to {track}.', paused: 'Paused.', resumed: 'Playing: {track}.',
+      noPlayer: 'Nothing’s playing music right now.', mediaFailed: 'The player didn’t listen.',
       // opening an app you ask her to open
       opening: 'Opening {app}…',
       notInstalled: 'I can’t find “{app}” in your apps.',

@@ -12,6 +12,14 @@ const LOADING_AFTER_MS = 5000;
 const CLOSE_TAG = /\[\[\s*close\s*:?\s*([^\]]*)\]\]/i; // [[close: AM Music]] at the end of her answer
 // "close", "shut down", "quit", "kill", "exit"...
 const CLOSE_ASK = /\b(close|shut|quit|kill|exit)\b/i;
+const MEDIA_TAG = /\[\[\s*(?:media|music)\s*:?\s*(next|previous|pause|play|playpause)\s*\]\]/i; // [[media: next]]
+// "skip this song", "next track", "go back a song", "pause the music"...
+const MEDIA_ASK = [
+  ['next', /\b(skip|next)\b.*\b(song|track|tune|one)\b|\bskip\b(?!.*\bback\b)/i],
+  ['previous', /\b(previous|last|go back|back)\b.*\b(song|track|tune)\b/i],
+  ['pause', /\b(pause|stop)\b.*\b(music|song|spotify|track)\b/i],
+  ['play', /\b(resume|unpause|play)\b.*\b(music|spotify)\b/i],
+];
 const OPEN_TAG = /\[\[\s*open\s*:?\s*([^\]]*)\]\]/i; // [[open: Firefox]]
 const OPEN_ASK = /\b(open|launch|start|run|fire up|bring up)\b/i;
 
@@ -145,9 +153,11 @@ export class Chat {
     this.panel.setFace(mood(answer));
     this.panel.setChatBusy(false);
     // what you asked for first (a small model doesn't always write its tag right), else its tag
-    const toOpen = tagged(res.text, OPEN_TAG) || this.askedToOpen(text);
-    const wanted = !toOpen && (this.askedToClose(text) || tagged(res.text));
-    if (toOpen) this.openApp(toOpen, answer);
+    const music = MEDIA_TAG.exec(res.text)?.[1]?.toLowerCase() || MEDIA_ASK.find(([, re]) => re.test(text))?.[0];
+    const toOpen = !music && (tagged(res.text, OPEN_TAG) || this.askedToOpen(text));
+    const wanted = !music && !toOpen && (this.askedToClose(text) || tagged(res.text));
+    if (music) this.controlMusic(music, answer);
+    else if (toOpen) this.openApp(toOpen, answer);
     else if (wanted) this.offerClose(wanted, answer);
     this.listApps(); // fresh for the next message
   }
@@ -156,6 +166,7 @@ export class Chat {
     this.appsReady = Promise.all([
       this.host.openApps().then((list) => { this.apps = list || []; }),
       this.host.installedApps().then((list) => { this.installed = list || []; }),
+      this.host.mediaStatus().then((m) => { this.music = m; }),
     ]).catch(() => {});
   }
 
@@ -170,6 +181,22 @@ export class Chat {
       }
     }
     return best?.app.name || null;
+  }
+
+  // Skip / back / pause / play, on Spotify (or whatever player is up). Harmless, so no button.
+  async controlMusic(action, answer) {
+    const { t, capri } = this;
+    const res = await this.host.media(action);
+    if (!this.open) return;
+    let line;
+    if (!res?.ok) line = res?.error === 'noplayer' ? t.noPlayer : t.mediaFailed;
+    else {
+      const track = res.track || 'the next one';
+      line = fmt({ next: t.skipped, previous: t.back, pause: t.paused }[action] || t.resumed, { track });
+      const h = capri.head();
+      capri.zap(h.x + capri.towardCenter() * 200, h.y - 150);
+    }
+    this.panel.stream(`${answer}\n${line}`, { done: true });
   }
 
   // Opening is harmless, so no button: she just does it (only apps from the installed list).
@@ -247,7 +274,7 @@ export class Chat {
 
   // What she can do on the PC: open an installed app, close an open one (after a click), nothing else.
   powers() {
-    const cant = 'you can\'t see the user\'s screen or files, and you can\'t touch anything else on their PC (music, settings, files, commands): if asked, say plainly that you can\'t, in character, and don\'t pretend to.';
+    const cant = 'you can\'t see the user\'s screen or files, and you can\'t touch anything else on their PC (settings, files, volume, commands): if asked, say plainly that you can\'t, in character, and don\'t pretend to.';
     const out = [];
     if (this.installed.length) {
       const names = [...new Set(this.installed.map((a) => a.name))].join(', ');
@@ -257,6 +284,8 @@ export class Chat {
       const open = this.apps.map(({ name, label }) => (label && label !== name ? `${name} (${label})` : name)).join(', ');
       out.push(`You can close an app that's open on the user's PC, only when they ask you to. Then say in a few words that you will, and end your answer with [[close: NAME]], NAME being the exact name from this list (the part before the parentheses). They get a button to confirm it, so never say it's already done. Apps open right now: ${open}.`);
     }
+    out.push('You can control the music player (Spotify): when the user asks to skip, go back, pause or resume, say a few words and end your answer with [[media: next]], [[media: previous]], [[media: pause]] or [[media: play]]. Never say which song comes next, you don\'t know until it plays.');
+    if (this.music?.track) out.push(`Playing right now (${this.music.state || 'unknown'}): ${this.music.track}.`);
     out.push(`Apart from that, ${cant}`);
     return out;
   }
