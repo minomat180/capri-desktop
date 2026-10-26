@@ -42,8 +42,11 @@ export const LINES = {
       line: '{agent} wants a secret: “{label}”.',
       badge: 'VAULT',
       allow: 'Release it', deny: 'Deny',
-      allowed: 'Released “{label}”.', denied: 'Denied. “{label}” stays locked.',
-      elsewhere: 'Answered in the terminal.', expired: 'That request timed out.',
+      allowed: 'Released “{label}”. Running it…', denied: 'Denied. “{label}” stays locked.',
+      elsewhere: 'Answered in pi.', expired: 'That request timed out.',
+      worked: '“{label}”: done, it went through.',
+      failed: 'Released “{label}”, but the command failed (exit {code}). The details are in pi.',
+      broke: 'Couldn’t use “{label}”: {error}',
     },
     // talking to her (chat.js): a local model through Ollama; replies and voice are AI-generated, and she says so
     chat: {

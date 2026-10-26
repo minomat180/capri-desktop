@@ -88,7 +88,7 @@ function approvalSettle(id, decision, via) {
   for (const res of a.waiters) send(res, 200, { ok: true, decision });
   a.waiters = [];
   emit('approval:done', { id, decision });
-  setTimeout(() => approvals.delete(id), 30000);
+  setTimeout(() => approvals.delete(id), 10 * 60 * 1000); // the command's outcome comes later
 }
 
 setInterval(() => {
@@ -399,13 +399,31 @@ const server = http.createServer(async (req, res) => {
       return send(res, 400, { ok: false, error: err.message });
     }
   }
+  // how the command went, after a release (so "released" isn't the last word if it then failed)
+  const ar = /^\/approval\/([0-9a-f]{32})\/result$/.exec(p);
+  if (ar && req.method === 'POST') {
+    if (req.headers.origin) return send(res, 403, { ok: false });
+    const a = approvals.get(ar[1]);
+    if (!a || a.decision !== 'allow' || a.reported) return send(res, 404, { ok: false });
+    a.reported = true;
+    try {
+      const body = await readJson(req, 4096);
+      const exitCode = Number.isInteger(body?.exitCode) ? body.exitCode : null;
+      const error = body?.error ? clip(body.error, 200) : null;
+      log(`approval outcome: "${a.info.label}" exit ${exitCode}${error ? ` (${error})` : ''}`);
+      emit('approval:result', { id: ar[1], label: a.info.label, exitCode, error });
+      return send(res, 200, { ok: true });
+    } catch (err) {
+      return send(res, 400, { ok: false, error: err.message });
+    }
+  }
   const am = /^\/approval\/([0-9a-f]{32})$/.exec(p);
   if (am) {
     if (req.headers.origin) return send(res, 403, { ok: false });
     const a = approvals.get(am[1]);
     if (!a) return send(res, 404, { ok: false, error: 'unknown' });
     if (req.method === 'DELETE') {
-      approvalSettle(am[1], 'withdrawn', 'terminal');
+      approvalSettle(am[1], 'withdrawn', 'pi');
       return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {

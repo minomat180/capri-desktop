@@ -35,7 +35,7 @@
     try { fn(payload); } catch (err) { console.error('[host]', channel, err); }
   });
 
-  const CHANNELS = ['claude:event', 'capri:command', 'capri:config', 'overlay:resize', 'windows:update', 'chat:delta', 'cursor', 'approval:request', 'approval:done'];
+  const CHANNELS = ['claude:event', 'capri:command', 'capri:config', 'overlay:resize', 'windows:update', 'chat:delta', 'cursor', 'approval:request', 'approval:done', 'approval:result'];
   const stream = new EventSource(`/host/stream?token=${encodeURIComponent(token)}`);
   for (const channel of CHANNELS) {
     stream.addEventListener(channel, (e) => fire(channel, JSON.parse(e.data)));
@@ -107,6 +107,7 @@
     media: call('media'),
     onApproval: on('approval:request'),
     onApprovalDone: on('approval:done'),
+    onApprovalResult: on('approval:result'),
     // only a real click counts: the shell drops anything not marked trusted, and it goes over its pipe
     answerApproval: (id, decision, trusted) => shellPost({ type: 'approval', id, decision, trusted: trusted === true }),
     mediaStatus: call('mediaStatus'),

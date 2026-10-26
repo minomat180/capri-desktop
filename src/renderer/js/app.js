@@ -298,6 +298,14 @@ async function boot() {
       if (!shown) { showing = null; setTimeout(show, 1500); }
     };
     host.onApproval((a) => { queue.push(a); show(); });
+    host.onApprovalResult?.(({ label, exitCode, error }) => {
+      const line = error ? fmt(ta().broke, { label, error })
+        : exitCode === 0 ? fmt(ta().worked, { label })
+          : fmt(ta().failed, { label, code: exitCode ?? '?' });
+      const ok = !error && exitCode === 0;
+      if (ok) capri.perform('hop');
+      panel.say({ kind: ok ? 'done' : 'error', badge: ta().badge, line, hold: ok ? 5000 : 9000 });
+    });
     host.onApprovalDone(({ id, decision }) => {
       const i = queue.findIndex((q) => q.id === id);
       if (i < 0) return;
@@ -308,7 +316,8 @@ async function boot() {
         const line = { allow: ta().allowed, deny: ta().denied, withdrawn: ta().elsewhere, expired: ta().expired }[decision] || ta().elsewhere;
         if (panel.current?.sticky) panel.current.sticky = false; // answered: it may go now
         panel.hide();
-        setTimeout(() => panel.say({ kind: 'info', badge: ta().badge, line: fmt(line, { label: a.label }), hold: 3500 }), 250);
+        // released: she stays on it until the command reports back (or a minute passes)
+        setTimeout(() => panel.say({ kind: 'info', badge: ta().badge, line: fmt(line, { label: a.label }), hold: decision === 'allow' ? 60000 : 3500 }), 250);
       }
       setTimeout(show, queue.length ? 900 : 0);
     });
