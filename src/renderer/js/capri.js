@@ -23,6 +23,9 @@ const GREEN = [0.21, 1, 0.48];
 const INK = [0.08, 0.06, 0.11];
 const RED = [1, 0.13, 0.32];
 
+// how far past her outline the pointer still grabs her, in screen pixels
+const GRAB_SCREEN_PX = 18;
+
 export class Capri {
   constructor({ root, canvas, image, fx, voice }) {
     this.root = root;
@@ -88,6 +91,7 @@ export class Capri {
     this.onDoze = null;   // ('start', face) | 'waking' | 'end': down to her mask and back
 
     this.alphaMap = this.buildAlphaMap(image);
+    this.grabMap = this.buildGrabMap(this.alphaMap);
     this.setScale(this.scale);
     this.bindPointer();
     this.loop = this.loop.bind(this);
@@ -113,6 +117,35 @@ export class Capri {
       }
     }
     return data;
+  }
+
+  // Her body, grown by GRAB_SCREEN_PX on screen all round: what the pointer can grab. Her cut-out is
+  // spiky and thin (hair, fingers, legs); on its exact outline she was a pain to catch. Square
+  // dilation, done once, two passes (rows then columns); the map has a margin so the grown edge
+  // past the sprite's own box counts too. In sprite pixels, so it holds for her base scale.
+  buildGrabMap(alpha) {
+    const { width: w, height: h } = SPRITE;
+    const r = Math.round(GRAB_SCREEN_PX / 0.6); // in sprite pixels at her default scale
+    const W = w + 2 * r, H = h + 2 * r;
+    const solid = new Uint8Array(W * H);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) if (alpha[(y * w + x) * 4 + 3] > 40) solid[(y + r) * W + x + r] = 1;
+    }
+    const rows = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) {
+      let last = -Infinity; // last solid column seen, scanning both ways
+      for (let x = 0; x < W; x++) { if (solid[y * W + x]) last = x; if (x - last <= r) rows[y * W + x] = 1; }
+      last = Infinity;
+      for (let x = W - 1; x >= 0; x--) { if (solid[y * W + x]) last = x; if (last - x <= r) rows[y * W + x] = 1; }
+    }
+    const out = new Uint8Array(W * H);
+    for (let x = 0; x < W; x++) {
+      let last = -Infinity;
+      for (let y = 0; y < H; y++) { if (rows[y * W + x]) last = y; if (y - last <= r) out[y * W + x] = 1; }
+      last = Infinity;
+      for (let y = H - 1; y >= 0; y--) { if (rows[y * W + x]) last = y; if (last - y <= r) out[y * W + x] = 1; }
+    }
+    return { map: out, r, W, H };
   }
 
   setScale(scale) {
@@ -182,6 +215,12 @@ export class Capri {
       // same fold as the shader: short thighs, legs ridden up
       const c = lerp(1, 0.3, this.p.sit);
       sy = sy <= SPRITE.hip + THIGH * c ? SPRITE.hip + (sy - SPRITE.hip) / c : sy + THIGH * (1 - c);
+    }
+    // the grown outline (buildGrabMap): easy to catch, while the space around her stays click-through
+    const g = this.grabMap;
+    if (g) {
+      const px = Math.round(sx) + g.r, py = Math.round(sy) + g.r;
+      return px >= 0 && py >= 0 && px < g.W && py < g.H && g.map[py * g.W + px] === 1;
     }
     for (const [dx, dy] of [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]]) {
       const px = Math.round(sx + dx), py = Math.round(sy + dy);
