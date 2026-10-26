@@ -787,9 +787,24 @@ body {
   left: 0;
   top: 0;
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
   filter: drop-shadow(3px 3px 0 var(--violet));
   will-change: transform;
 }
+.ticker[hidden] { display: none; }
+
+/* several agents at once: whose plate this is */
+.ticker__who {
+  flex: none;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--paper-3);
+}
+.ticker__who:empty { display: none; }
 
 .ticker__plate {
   display: flex;
@@ -804,7 +819,7 @@ body {
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
 }
 
-.ticker.is-flash .ticker__plate {
+.ticker__plate.is-flash {
   animation: ticker-flash 160ms steps(2, jump-end) 1;
 }
 
@@ -821,7 +836,7 @@ body {
   animation: blink 700ms steps(2, jump-none) infinite;
 }
 
-.ticker[data-error='true'] .ticker__dot {
+.ticker__plate[data-error='true'] .ticker__dot {
   background: var(--red);
 }
 
@@ -840,21 +855,21 @@ body {
 }
 
 /* Claude thinking, nothing to show yet: her violet, a slower pulse, the seconds counting up */
-.ticker[data-thinking='true'] .ticker__dot {
+.ticker__plate[data-thinking='true'] .ticker__dot {
   background: var(--violet);
   animation-duration: 1400ms;
 }
 
-.ticker[data-thinking='true'] .ticker__verb {
+.ticker__plate[data-thinking='true'] .ticker__verb {
   color: var(--paper);
 }
 
-.ticker[data-thinking='true'] .ticker__verb::after {
+.ticker__plate[data-thinking='true'] .ticker__verb::after {
   content: '…';
   letter-spacing: 0;
 }
 
-.ticker[data-thinking='true'] .ticker__target {
+.ticker__plate[data-thinking='true'] .ticker__target {
   font-variant-numeric: tabular-nums;
 }
 
@@ -864,7 +879,7 @@ body {
   .panel.is-entering .panel__frame,
   .panel.is-leaving .panel__frame,
   .panel__face img,
-  .ticker.is-flash .ticker__plate,
+  .ticker__plate.is-flash,
   .ticker__dot,
   .panel__line.is-streaming::after,
   .panel[data-kind='alert'] .panel__state {

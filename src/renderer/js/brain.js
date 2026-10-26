@@ -63,6 +63,20 @@ export class Brain {
     return [...this.sessions.values()].filter((s) => s.working);
   }
 
+  // The plates over her head: one per busy session, newest first (the panel shows three at most),
+  // each with what that session is doing now, or how long it's been thinking.
+  refreshTicker() {
+    // the three most recently active, shown in a steady order (oldest task on top) so the
+    // plates don't swap places every time a different agent does something
+    const rows = this.busySessions
+      .filter((s) => s.tick)
+      .sort((a, b) => b.seen - a.seen)
+      .slice(0, 3)
+      .sort((a, b) => (a.taskStart || 0) - (b.taskStart || 0))
+      .map((s) => ({ key: s.id, who: s.title || s.project, ...s.tick }));
+    this.panel.setTickers(rows);
+  }
+
   // which agent a line should name: the session's, or Claude by default (most lines - her
   // welcome, hooks, Claude's window guide - are about Claude Code specifically regardless)
   agentName(s) {
@@ -129,7 +143,7 @@ export class Brain {
     // the window in front when you send a prompt is the one you typed it in: Claude's
     // (on Linux the service knows it from the agent's process tree: evt.window_id)
     const window = evt.window_id || this.capri.windows.fg || null;
-    Object.assign(s, { taskStart: Date.now(), count: 0, files: new Set(), log: [], working: true, window });
+    Object.assign(s, { taskStart: Date.now(), count: 0, files: new Set(), log: [], working: true, window, tick: null, last: null });
     this.tally(evt)?.prompt(s.project);
     if (this.isChatting()) this.capri.setMode('work'); // mid-conversation: she doesn't walk off
     else this.capri.goToWork(); // perched on the window in front if she can, else her corner
@@ -152,18 +166,24 @@ export class Brain {
       this.thinking = null;
       return;
     }
+    const t = this.t.thinking;
+    // every busy session's plate: what it last did, or the seconds it's been quiet (thinking)
+    for (const b of busy) {
+      const q = Date.now() - b.seen;
+      b.tick = !b.waiting && q >= THINK_AFTER
+        ? { verb: t.verb, target: duration(q, this.lang), thinking: true }
+        : b.last || b.tick || null;
+    }
+    this.refreshTicker();
+    // her fidgeting and remarks follow the newest one
     const s = busy.sort((a, b) => b.seen - a.seen)[0];
     const quiet = Date.now() - s.seen; // any event from it counts as a sign of life
     if (s.waiting || quiet < THINK_AFTER) {
-      // it spoke up again (or it's your turn): whatever it did is on the ticker now
-      if (this.thinking && this.panel.tickerAction?.thinking) this.panel.setTicker(s.last || null);
       this.thinking = null;
       return;
     }
     let th = this.thinking;
     if (th?.s !== s || th.since !== s.seen) th = this.thinking = { s, since: s.seen, said: 0, fidget: 0, gazed: false };
-    const t = this.t.thinking;
-    this.panel.setTicker({ verb: t.verb, target: duration(quiet, this.lang), thinking: true });
 
     const now = performance.now();
     if (now > th.fidget && !this.capri.stowed) {
@@ -188,6 +208,7 @@ export class Brain {
     s.working = true;
     s.count += 1;
     s.last = action;
+    s.tick = action;
     s.log.push(action);
     if (s.log.length > 8) s.log.shift();
     this.tally(evt)?.action();
@@ -198,7 +219,7 @@ export class Brain {
     if (this.capri.mode !== 'alert') this.capri.setMode('work');
     this.capri.pulse();
     if (HACKING_TOOLS.has(evt.tool_name)) this.capri.spark(); // red sparks: she's in the system
-    this.panel.setTicker(action);
+    this.refreshTicker();
     if (this.panel.current?.kind === 'work') this.panel.updateLog(s.log);
     if (s.count % WORKING_EVERY === 0) {
       this.say('work', fmt(pick(this.t.working), { count: s.count }), s, { log: s.log, hold: 4000 });
@@ -208,6 +229,8 @@ export class Brain {
   onToolFailure(evt, s) {
     const action = { ...this.describe(evt), error: true };
     s.log.push(action);
+    s.tick = action; // its plate goes red
+    this.refreshTicker();
     if (evt.is_interrupt) {
       this.say('info', pick(this.t.interrupted), s, { face: 'wide', hold: 4000 });
       return;
@@ -276,8 +299,8 @@ export class Brain {
       this.tally(evt)?.done({ files: s.files.size, ms: s.taskStart ? Date.now() - s.taskStart : 0, project: s.project });
     }
 
+    this.refreshTicker(); // its plate goes; the others stay
     if (!this.busySessions.length) {
-      this.panel.setTicker(null);
       this.capri.setMode('idle');
     }
     // Not on Claude's window any more: you can't see the answer, so she brings it to you, whole,
@@ -326,8 +349,8 @@ export class Brain {
 
   onStopFailure(evt, s) {
     s.working = false;
+    this.refreshTicker(); // its plate goes; the others stay
     if (!this.busySessions.length) {
-      this.panel.setTicker(null);
       this.capri.setMode('idle');
     }
     this.capri.hurt();
@@ -341,13 +364,14 @@ export class Brain {
     const line = fmt(pick(starting ? this.t.subagentStart : this.t.subagentStop), { agent });
     const action = { verb: starting ? '↗' : '↘', target: line };
     s.log.push(action);
-    this.panel.setTicker(action);
+    s.tick = action;
+    this.refreshTicker();
   }
 
   onSessionEnd(evt, s) {
     this.sessions.delete(s.id);
+    this.refreshTicker(); // its plate goes; the others stay
     if (!this.busySessions.length) {
-      this.panel.setTicker(null);
       this.capri.setMode('idle');
     }
     this.say('info', fmt(pick(this.t.bye), { project: s.project }), s, { face: 'aside', hold: 4000 });

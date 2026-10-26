@@ -172,7 +172,15 @@ export const LINES = {
       Read: 'Reads', Write: 'Writes', Edit: 'Edits', MultiEdit: 'Edits', NotebookEdit: 'Edits',
       Bash: 'Runs', PowerShell: 'Runs', Grep: 'Greps', Glob: 'Scans', WebFetch: 'Fetches',
       WebSearch: 'Searches', Agent: 'Delegates', Task: 'Delegates', TodoWrite: 'Plans', Skill: 'Loads',
-      AskUserQuestion: 'Asks', ExitPlanMode: 'Proposes', default: 'Uses',
+      AskUserQuestion: 'Asks', ExitPlanMode: 'Proposes',
+      // pi's own tools (lower-case) and this setup's
+      read: 'Reads', write: 'Writes', edit: 'Edits', bash: 'Runs', powershell: 'Runs', grep: 'Greps',
+      find: 'Scans', ls: 'Lists', agent_browser: 'Browses', agent_browser_code: 'Browses',
+      agent_browser_action: 'Browses', agent_browser_qa: 'Checks', agent_browser_tools: 'Loads',
+      vault_use: 'Unlocks', ipod_vault_use: 'Unlocks', vault_list: 'Lists', ipod_vault_list: 'Lists',
+      spawn_agent: 'Delegates', delegate_task: 'Delegates', task_status: 'Checks', local_delegate: 'Asks',
+      session_control: 'Tunes', tool_search: 'Searches', mcp: 'Calls',
+      default: 'Uses',
     },
   },
 };

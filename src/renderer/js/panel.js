@@ -20,6 +20,7 @@ export const FACES = {
 const KIND_FACE = { alert: 'many', done: 'look', error: 'laugh', work: 'calm', idle: 'calm', report: 'smug', chat: 'look' };
 const PRIORITY = { info: 1, idle: 1, work: 2, done: 3, error: 3, report: 3, chat: 3, alert: 4 };
 const DECODE_STEP_MS = 28;
+const TICKER_MAX = 3; // plates over her head at once, one per busy agent
 const COUNT_MS = 700; // her report's numbers counting up
 
 export class Panel {
@@ -39,8 +40,11 @@ export class Panel {
     this.log = panel.querySelector('.panel__log');
     this.tag = panel.querySelector('.panel__tag');
     this.state = panel.querySelector('.panel__state');
-    this.tickerVerb = ticker.querySelector('.ticker__verb');
-    this.tickerTarget = ticker.querySelector('.ticker__target');
+    // one plate per busy session (up to TICKER_MAX); the one in the page is the template
+    this.tickerTemplate = ticker.querySelector('.ticker__plate');
+    this.tickerTemplate.remove();
+    this.tickerPlates = new Map(); // row key -> plate element
+    this.tickerRows = [];
     this.current = null;
     this.hideTimer = null;
     this.decodeTimer = null;
@@ -390,7 +394,7 @@ export class Panel {
       }, 150);
     }
     // back to the ticker if Claude is still busy
-    if (this.tickerAction) this.setTicker(this.tickerAction);
+    if (this.tickerRows.length) this.setTickers(this.tickerRows);
   }
 
   // Only drop a sticky alert (permission prompt) once it has been dealt with.
@@ -450,36 +454,63 @@ export class Panel {
 
   // Ticker: "▸ Modifie  main.js" floating over her head while Claude works.
   // Throttled so a burst of tool calls reads as a flicker of activity, not noise.
+  // One action, no session: the old single ticker (her own commands use it to clear it).
   setTicker(action) {
-    this.tickerAction = action;
+    this.setTickers(action ? [{ key: '_', ...action }] : []);
+  }
+
+  // A plate per busy session, newest first: [{ key, who, verb, target, error, thinking }].
+  // `who` only shows when there's more than one, so a single agent looks like it always did.
+  setTickers(rows) {
+    this.tickerRows = rows.slice(0, TICKER_MAX);
+    this.tickerAction = this.tickerRows[0] || null;
     clearTimeout(this.tickerTimer);
-    // talking with her: the activity goes in the chat itself
+    // talking with her: the activity goes in the chat itself (the newest one)
     if (this.current?.chat && this.visible) {
       this.tickerEl.hidden = true;
-      if (action || !this.activity.dataset.news) this.showActivity(action);
+      if (this.tickerAction || !this.activity.dataset.news) this.showActivity(this.tickerAction);
       return;
     }
-    if (!action || this.visible) {
+    if (!this.tickerRows.length || this.visible) {
       this.tickerEl.hidden = true;
       return;
     }
     const wait = Math.max(0, 380 - (performance.now() - this.tickerShownAt));
-    this.tickerTimer = setTimeout(() => {
-      // Claude thinking: the seconds counting up don't flash each time, only the first one does
-      const counting = action.thinking && this.tickerEl.dataset.thinking === 'true' && !this.tickerEl.hidden;
-      this.tickerShownAt = performance.now();
-      this.tickerVerb.textContent = action.verb;
-      this.tickerTarget.textContent = action.target || '';
-      this.tickerEl.dataset.error = action.error ? 'true' : 'false';
-      this.tickerEl.dataset.thinking = action.thinking ? 'true' : 'false';
-      this.tickerEl.hidden = false;
-      if (!counting) {
-        this.tickerEl.classList.remove('is-flash');
-        void this.tickerEl.offsetWidth;
-        this.tickerEl.classList.add('is-flash');
+    this.tickerTimer = setTimeout(() => this.renderTickers(), wait);
+  }
+
+  renderTickers() {
+    this.tickerShownAt = performance.now();
+    const rows = this.tickerRows;
+    const many = rows.length > 1;
+    const keep = new Set(rows.map((r) => r.key));
+    for (const [key, plate] of this.tickerPlates) {
+      if (!keep.has(key)) { plate.remove(); this.tickerPlates.delete(key); }
+    }
+    rows.forEach((row, i) => {
+      let plate = this.tickerPlates.get(row.key);
+      if (!plate) {
+        plate = this.tickerTemplate.cloneNode(true);
+        this.tickerPlates.set(row.key, plate);
       }
-      this.place();
-    }, wait);
+      // the seconds of a think counting up don't flash each time; a new action does
+      const text = `${row.verb}\u0000${row.target || ''}`;
+      const changed = plate.dataset.text !== text && !(row.thinking && plate.dataset.thinking === 'true');
+      plate.dataset.text = text;
+      plate.querySelector('.ticker__who').textContent = many && row.who ? row.who : '';
+      plate.querySelector('.ticker__verb').textContent = row.verb;
+      plate.querySelector('.ticker__target').textContent = row.target || '';
+      plate.dataset.error = row.error ? 'true' : 'false';
+      plate.dataset.thinking = row.thinking ? 'true' : 'false';
+      if (this.tickerEl.children[i] !== plate) this.tickerEl.insertBefore(plate, this.tickerEl.children[i] || null);
+      if (changed) {
+        plate.classList.remove('is-flash');
+        void plate.offsetWidth;
+        plate.classList.add('is-flash');
+      }
+    });
+    this.tickerEl.hidden = false;
+    this.place();
   }
 
   // The strip in the chat: { who, verb, target, error, thinking, news } or null to hide it.
