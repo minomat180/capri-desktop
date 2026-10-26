@@ -111,7 +111,8 @@ export class Brain {
 
   onPrompt(evt, s) {
     // the window in front when you send a prompt is the one you typed it in: Claude's
-    const window = this.capri.windows.fg || null;
+    // (on Linux the service knows it from the agent's process tree: evt.window_id)
+    const window = evt.window_id || this.capri.windows.fg || null;
     Object.assign(s, { taskStart: Date.now(), count: 0, files: new Set(), log: [], working: true, window });
     this.tally(evt)?.prompt(s.project);
     this.capri.goToWork(); // perched on the window in front if she can, else her corner
