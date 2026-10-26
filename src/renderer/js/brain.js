@@ -35,7 +35,8 @@ export class Brain {
     this.linked = true;      // has a Claude Code event ever reached her (app.js sets it from the config)
     this.onLinked = null;
     this.onShowcase = null; // the demo's second half (app.js)
-    this.onTalk = null;     // opens a chat with her (app.js, chat.js)
+    this.onTalk = null;
+    this.isChatting = () => false; // you're talking with her (chat.js): she stays put, news goes in the chat     // opens a chat with her (app.js, chat.js)
     this.thinkTimer = 0;
     this.thinking = null;   // { s, since, said, fidget, gazed } while Claude is quiet mid-task
   }
@@ -130,7 +131,8 @@ export class Brain {
     const window = evt.window_id || this.capri.windows.fg || null;
     Object.assign(s, { taskStart: Date.now(), count: 0, files: new Set(), log: [], working: true, window });
     this.tally(evt)?.prompt(s.project);
-    this.capri.goToWork(); // perched on the window in front if she can, else her corner
+    if (this.isChatting()) this.capri.setMode('work'); // mid-conversation: she doesn't walk off
+    else this.capri.goToWork(); // perched on the window in front if she can, else her corner
     const prompt = String(evt.prompt || '').replace(/\s+/g, ' ').trim();
     this.say('work', pick(this.t.prompt), s, { quote: prompt ? clip(prompt, 110) : '', hold: 4500 });
     this.watchThinking();
@@ -230,6 +232,12 @@ export class Brain {
       this.tally(evt)?.approval();
       this.capri.setMode('alert');
       this.voice.play('alert');
+      // talking with her: no pointing across the screen, the question shows up in the chat
+      if (this.isChatting()) {
+        this.panel.showActivity({ who: s.title || s.project, verb: this.agentName(s), target: [fmt(pick(this.t.permission), { agent: this.agentName(s) }), evt.message].filter(Boolean).join(' '), error: true, news: true });
+        this.panel.missed = { kind: 'alert', line: fmt(pick(this.t.permission), { agent: this.agentName(s) }), tag: s.title || s.project, quote: evt.message || '', hold: null, missedAt: performance.now() };
+        return;
+      }
       // you're on another window: she goes and points at Claude's, where the question is
       const win = this.away(s) && this.capri.windows.wins.find((w) => w.id === s.window);
       if (win && this.capri.canPoint(win)) {
@@ -283,6 +291,11 @@ export class Brain {
     if (!wasWorking && !s.count) {
       // a Stop with nothing before it: just say it quietly
       done({ hold: 8000 });
+      return;
+    }
+    // talking with her: no show, the news goes in the chat (and comes back after it)
+    if (this.isChatting()) {
+      done({ summary, hold: 14000 });
       return;
     }
     // clear the stage: nothing should cover her victory pose
@@ -351,7 +364,9 @@ export class Brain {
     const s = busy.sort((a, b) => b.seen - a.seen)[0];
     const time = s.taskStart ? duration(Date.now() - s.taskStart, this.lang) : '…';
     const extra = busy.length > 1 ? ` ${fmt(this.t.sessions, { count: busy.length })}.` : '';
-    this.say('work', fmt(this.t.status, { project: s.project, time }) + extra, s, { log: s.log, hold: 6000 });
+    // busy or not, you can still talk to her
+    const talk = this.onTalk && { actions: [{ id: 'talk', label: this.t.chat.talk }], onAction: () => this.onTalk(), hold: 8000 };
+    this.say('work', fmt(this.t.status, { project: s.project, time }) + extra, s, { log: s.log, hold: 6000, ...talk });
   }
 
   // What's going on, in plain words, for her chat: so she can answer "what's Claude up to?".

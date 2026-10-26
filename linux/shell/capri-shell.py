@@ -130,6 +130,15 @@ class Shell(Gtk.Application):
             Layer.set_keyboard_mode(self.window, Layer.KeyboardMode.EXCLUSIVE if on else Layer.KeyboardMode.NONE)
         elif kind == "copy":
             self.copy(msg.get("id"), msg.get("rect") or {})
+        elif kind == "approval":
+            # a vault approval, clicked in her panel: straight to the service over fd 3 (a pipe
+            # only it holds; never over HTTP, where an agent could fake it)
+            decision = msg.get("decision")
+            if msg.get("trusted") is True and decision in ("allow", "deny") and isinstance(msg.get("id"), str):
+                try:
+                    os.write(3, (json.dumps({"type": "approval", "id": msg["id"], "decision": decision}) + "\n").encode())
+                except OSError as err:
+                    log("approval pipe:", err)
 
     def apply_input_region(self):
         surface = self.window.get_surface() if self.window else None

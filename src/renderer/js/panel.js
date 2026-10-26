@@ -60,6 +60,11 @@ export class Panel {
     this.chatSend = panel.querySelector('.panel__send');
     this.chatClose = panel.querySelector('.panel__close');
     this.note = panel.querySelector('.panel__note');
+    // the agents' activity, shown inside the chat (the floating ticker would sit on top of it)
+    this.activity = panel.querySelector('.panel__activity');
+    this.activityWho = panel.querySelector('.panel__activity-who');
+    this.activityVerb = panel.querySelector('.panel__activity-verb');
+    this.activityTarget = panel.querySelector('.panel__activity-target');
     this.chatForm.addEventListener('click', (e) => e.stopPropagation());
     this.chatForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -107,10 +112,16 @@ export class Panel {
     // nor on something you may be reading: an answer, her report (progress lines don't knock it off)
     if (cur?.reply && this.visible && PRIORITY[msg.kind] < 2) return false;
     if (cur?.report && this.visible && PRIORITY[msg.kind] < 3) return false;
+    // nor on a question waiting for your answer (a vault approval): only another one replaces it
+    if (cur?.sticky && this.visible && !msg.sticky) return false;
     // nor on a chat with her: only a permission prompt breaks in; Claude finishing waits until after
     // (even while she teleports and the panel is put aside for a moment)
     if (cur?.chat && !this.el.hidden && !this.leaving && PRIORITY[msg.kind] < 4) {
       if (PRIORITY[msg.kind] >= 3) this.missed = { ...msg, missedAt: performance.now() };
+      // still, you see it happen: a line in the chat's activity strip
+      if (msg.kind !== 'idle' && msg.line) {
+        this.showActivity({ who: msg.tag, verb: msg.badge || this.labels.state?.[msg.kind] || msg.kind, target: msg.line, error: msg.kind === 'error', news: true });
+      }
       return false;
     }
     if (cur && this.visible) this.onDismiss?.(cur);
@@ -130,9 +141,11 @@ export class Panel {
     this.el.classList.toggle('has-reply', Boolean(msg.reply));
     this.el.classList.toggle('has-report', Boolean(msg.report));
     this.el.classList.toggle('is-guide', Boolean(msg.guide));
+    this.el.classList.toggle('is-sticky', Boolean(msg.sticky));
     this.renderReport(msg.report);
     this.renderActions(msg.actions, msg.onAction);
     this.renderChat(msg.chat);
+    this.showActivity(msg.chat ? this.tickerAction : null);
     this.summary.textContent = msg.summary || '';
     this.summary.hidden = !msg.summary;
     this.renderLog(msg.log || []);
@@ -234,8 +247,8 @@ export class Panel {
       button.textContent = label;
       button.addEventListener('click', (e) => {
         e.stopPropagation(); // a click on the panel itself closes it
-        if (onAction) onAction(id);
-        else this.onAction?.(id);
+        if (onAction) onAction(id, e);
+        else this.onAction?.(id, e);
       });
       return button;
     }));
@@ -382,6 +395,8 @@ export class Panel {
 
   // Only drop a sticky alert (permission prompt) once it has been dealt with.
   clearKind(kind) {
+    if (this.missed?.kind === kind) this.missed = null; // answered while you were chatting
+    if (kind === 'alert' && this.activity.dataset.error === 'true' && this.activity.dataset.news) this.showActivity(this.tickerAction);
     if (this.current?.kind === kind) this.hide();
   }
 
@@ -438,6 +453,12 @@ export class Panel {
   setTicker(action) {
     this.tickerAction = action;
     clearTimeout(this.tickerTimer);
+    // talking with her: the activity goes in the chat itself
+    if (this.current?.chat && this.visible) {
+      this.tickerEl.hidden = true;
+      if (action || !this.activity.dataset.news) this.showActivity(action);
+      return;
+    }
     if (!action || this.visible) {
       this.tickerEl.hidden = true;
       return;
@@ -459,6 +480,23 @@ export class Panel {
       }
       this.place();
     }, wait);
+  }
+
+  // The strip in the chat: { who, verb, target, error, thinking, news } or null to hide it.
+  showActivity(a) {
+    if (!a) {
+      this.activity.hidden = true;
+      delete this.activity.dataset.news;
+      return;
+    }
+    this.activityWho.textContent = a.who ? `${a.who} ·` : '';
+    this.activityVerb.textContent = a.verb || '';
+    this.activityTarget.textContent = a.target || '';
+    this.activity.dataset.error = a.error ? 'true' : 'false';
+    this.activity.dataset.thinking = a.thinking ? 'true' : 'false';
+    if (a.news) this.activity.dataset.news = 'true';
+    else delete this.activity.dataset.news;
+    this.activity.hidden = false;
   }
 
   setAnchor(anchor, view) {

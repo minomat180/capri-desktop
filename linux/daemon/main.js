@@ -52,6 +52,49 @@ function emit(channel, payload, kind = 'renderer') {
   for (const s of streams) if (s.kind === kind) s.res.write(data);
 }
 
+// ---------- vault approvals ----------
+// A vault extension (ipod_vault_use / vault_use) asks here as well as in its terminal; whichever
+// you answer first wins. Requests come over HTTP (anyone local could make one, and that's fine:
+// it only puts a question on screen). Answers do NOT: they only come from a real click in the
+// overlay, through the shell's private pipe (fd 3) that only this process holds. So an agent can't
+// approve its own request with curl.
+const approvals = new Map(); // id -> { info, decision, waiters: [res], at }
+const APPROVAL_TTL_MS = 10 * 60 * 1000;
+const clip = (v, n) => String(v ?? '').slice(0, n);
+
+function approvalRequest(body) {
+  const id = crypto.randomBytes(16).toString('hex');
+  const info = {
+    id,
+    vault: clip(body.vault, 40),
+    label: clip(body.label, 200),
+    reason: clip(body.reason, 500),
+    command: clip(body.command, 1000),
+    cwd: clip(body.cwd, 300),
+    agent: clip(body.agent, 20),
+    session: clip(body.session, 120),
+  };
+  approvals.set(id, { info, decision: null, waiters: [], at: Date.now() });
+  log(`approval asked: ${info.vault} "${info.label}" (${id.slice(0, 6)})`);
+  emit('approval:request', info);
+  return id;
+}
+
+function approvalSettle(id, decision, via) {
+  const a = approvals.get(id);
+  if (!a || a.decision) return;
+  a.decision = decision;
+  log(`approval ${decision} via ${via}: "${a.info.label}" (${id.slice(0, 6)})`);
+  for (const res of a.waiters) send(res, 200, { ok: true, decision });
+  a.waiters = [];
+  emit('approval:done', { id, decision });
+  setTimeout(() => approvals.delete(id), 30000);
+}
+
+setInterval(() => {
+  for (const [id, a] of approvals) if (!a.decision && Date.now() - a.at > APPROVAL_TTL_MS) approvalSettle(id, 'expired', 'timeout');
+}, 30000).unref();
+
 const sendCommand = (name, payload = {}) => emit('capri:command', { name, ...payload });
 
 // ---------- state ----------
@@ -344,6 +387,39 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && p === '/health') return send(res, 200, { ok: true, name: 'capri', pid: process.pid });
 
   // agent events: hooks and the pi extension never send an Origin header, browsers always do
+  // vault approvals: ask, wait for the answer (long poll), or withdraw (answered in the terminal)
+  if (p === '/approval' && req.method === 'POST') {
+    if (req.headers.origin) return send(res, 403, { ok: false });
+    try {
+      const body = await readJson(req, 16 * 1024);
+      if (!body?.label) return send(res, 400, { ok: false, error: 'missing label' });
+      if (!shell) return send(res, 503, { ok: false, error: 'no overlay' });
+      return send(res, 200, { ok: true, id: approvalRequest(body) });
+    } catch (err) {
+      return send(res, 400, { ok: false, error: err.message });
+    }
+  }
+  const am = /^\/approval\/([0-9a-f]{32})$/.exec(p);
+  if (am) {
+    if (req.headers.origin) return send(res, 403, { ok: false });
+    const a = approvals.get(am[1]);
+    if (!a) return send(res, 404, { ok: false, error: 'unknown' });
+    if (req.method === 'DELETE') {
+      approvalSettle(am[1], 'withdrawn', 'terminal');
+      return send(res, 200, { ok: true });
+    }
+    if (req.method === 'GET') {
+      if (a.decision) return send(res, 200, { ok: true, decision: a.decision });
+      a.waiters.push(res);
+      const t = setTimeout(() => {
+        a.waiters = a.waiters.filter((r) => r !== res);
+        send(res, 200, { ok: true, decision: null }); // ask again
+      }, 50000);
+      res.on('close', () => clearTimeout(t));
+      return;
+    }
+  }
+
   if (req.method === 'POST' && p === '/event') {
     if (req.headers.origin) return send(res, 403, { ok: false });
     try {
@@ -436,7 +512,23 @@ function startShell() {
   const url = `http://127.0.0.1:${PORT}/app/src/renderer/index.html`;
   const args = [path.join(here, 'capri-shell.py'), '--url', url];
   if (desktop.output) args.push('--output', desktop.output);
-  shell = spawn('python3', args, { env, stdio: ['ignore', 'inherit', 'inherit'] });
+  shell = spawn('python3', args, { env, stdio: ['ignore', 'inherit', 'inherit', 'pipe'] });
+  // fd 3: what only a real click in the overlay can send (vault approvals)
+  let pending = '';
+  shell.stdio[3].on('data', (chunk) => {
+    pending += chunk;
+    let nl;
+    while ((nl = pending.indexOf('\n')) >= 0) {
+      const line = pending.slice(0, nl);
+      pending = pending.slice(nl + 1);
+      try {
+        const msg = JSON.parse(line);
+        if (msg.type === 'approval' && typeof msg.id === 'string' && (msg.decision === 'allow' || msg.decision === 'deny')) {
+          approvalSettle(msg.id, msg.decision, 'capri');
+        }
+      } catch { /* not ours */ }
+    }
+  });
   const started = Date.now();
   shell.on('exit', (code, signal) => {
     shell = null;

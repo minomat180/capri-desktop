@@ -174,6 +174,7 @@ async function boot() {
   // Talking to her (chat.js): "Talk to her" in her menu, or the button when you click her idle.
   const chat = new Chat({ capri, panel, voice, host, brain });
   brain.onTalk = () => chat.start();
+  brain.isChatting = () => chat.open;
   // the first Claude Code event that ever reaches her: so you know it worked
   brain.linked = config.linked;
   brain.onLinked = (agent) => {
@@ -259,6 +260,59 @@ async function boot() {
   };
 
   host.onClaudeEvent((evt) => brain.handle(evt));
+
+  // Vault approvals (Linux): an agent wants a secret from ipod_vault_use / vault_use. You answer
+  // here or in its terminal, first one wins. One question at a time; the rest wait their turn.
+  if (host.onApproval) {
+    const queue = [];
+    let showing = null;
+    const ta = () => brain.t.approval;
+    const show = () => {
+      if (showing || !queue.length) return;
+      const a = (showing = queue[0]);
+      capri.wake();
+      capri.setMode('alert');
+      voice.play('alert');
+      const agent = a.agent === 'claude' ? 'Claude' : a.agent === 'pi' ? 'Pi' : 'An agent';
+      const quote = [
+        `${a.vault === 'ipod' ? 'iPod vault' : 'keyring vault'}: ${a.label}`,
+        a.reason,
+        `$ ${a.command}`,
+        a.cwd && `in ${a.cwd}`,
+      ].filter(Boolean).join('\n');
+      const shown = panel.say({
+        kind: 'alert', sticky: true, badge: ta().badge, tag: a.session || '',
+        line: fmt(ta().line, { agent, label: a.label }), quote, hold: null,
+        actions: [{ id: 'deny', label: ta().deny, primary: true }, { id: 'allow', label: ta().allow }],
+        onAction: (id, e) => {
+          if (showing !== a) return;
+          host.answerApproval(a.id, id === 'allow' ? 'allow' : 'deny', e?.isTrusted === true);
+        },
+        // closed without an answer (clicked away, or replaced): it comes back while it's pending
+        onLeave: () => {
+          if (showing !== a) return;
+          showing = null;
+          setTimeout(show, 1500);
+        },
+      });
+      if (!shown) { showing = null; setTimeout(show, 1500); }
+    };
+    host.onApproval((a) => { queue.push(a); show(); });
+    host.onApprovalDone(({ id, decision }) => {
+      const i = queue.findIndex((q) => q.id === id);
+      if (i < 0) return;
+      const [a] = queue.splice(i, 1);
+      if (showing === a) {
+        showing = null;
+        if (capri.mode === 'alert') capri.setMode('idle');
+        const line = { allow: ta().allowed, deny: ta().denied, withdrawn: ta().elsewhere, expired: ta().expired }[decision] || ta().elsewhere;
+        if (panel.current?.sticky) panel.current.sticky = false; // answered: it may go now
+        panel.hide();
+        setTimeout(() => panel.say({ kind: 'info', badge: ta().badge, line: fmt(line, { label: a.label }), hold: 3500 }), 250);
+      }
+      setTimeout(show, queue.length ? 900 : 0);
+    });
+  }
   host.onWindows((data) => {
     capri.setWindows(data);
     brain.onWindows(data);

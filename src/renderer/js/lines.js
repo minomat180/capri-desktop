@@ -37,6 +37,14 @@ export const LINES = {
     subagentStart: ['Subagent {agent} deployed.'],
     subagentStop: ['Subagent {agent} is back.'],
     compact: ['Compressing our memories…', 'Too much memory. Tidying up.'],
+    // a vault extension wants a secret: you approve or deny it here (or in the terminal)
+    approval: {
+      line: '{agent} wants a secret: “{label}”.',
+      badge: 'VAULT',
+      allow: 'Release it', deny: 'Deny',
+      allowed: 'Released “{label}”.', denied: 'Denied. “{label}” stays locked.',
+      elsewhere: 'Answered in the terminal.', expired: 'That request timed out.',
+    },
     // talking to her (chat.js): a local model through Ollama; replies and voice are AI-generated, and she says so
     chat: {
       badge: 'AI · LIVE', talk: 'Talk to me',

@@ -35,7 +35,7 @@
     try { fn(payload); } catch (err) { console.error('[host]', channel, err); }
   });
 
-  const CHANNELS = ['claude:event', 'capri:command', 'capri:config', 'overlay:resize', 'windows:update', 'chat:delta', 'cursor'];
+  const CHANNELS = ['claude:event', 'capri:command', 'capri:config', 'overlay:resize', 'windows:update', 'chat:delta', 'cursor', 'approval:request', 'approval:done'];
   const stream = new EventSource(`/host/stream?token=${encodeURIComponent(token)}`);
   for (const channel of CHANNELS) {
     stream.addEventListener(channel, (e) => fire(channel, JSON.parse(e.data)));
@@ -105,6 +105,10 @@
     findInstalled: call('findInstalled'),
     launchApp: call('launchApp'),
     media: call('media'),
+    onApproval: on('approval:request'),
+    onApprovalDone: on('approval:done'),
+    // only a real click counts: the shell drops anything not marked trusted, and it goes over its pipe
+    answerApproval: (id, decision, trusted) => shellPost({ type: 'approval', id, decision, trusted: trusted === true }),
     mediaStatus: call('mediaStatus'),
     closeApp: (name, force) => call('closeApp')({ name, force: Boolean(force) }),
     focusOverlay: (focused) => shellPost({ type: 'keyboard', on: Boolean(focused) }),
