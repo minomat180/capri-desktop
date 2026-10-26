@@ -3,8 +3,16 @@
 import { LINES } from './lines.js';
 import { pick, fmt, duration, basename, rand } from './util.js';
 
-const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-const HACKING_TOOLS = new Set(['Bash', 'PowerShell', 'WebFetch', 'WebSearch', 'Agent', 'Task']);
+// Claude Code's tool names, and pi's (lower-case builtins, plus the tools in this setup:
+// agent_browser, vault/ipod_vault, spawn_agent, T3's delegate_task, session_control...).
+const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'write', 'edit']);
+const HACKING_TOOLS = new Set([
+  'Bash', 'PowerShell', 'WebFetch', 'WebSearch', 'Agent', 'Task',
+  'bash', 'powershell', 'agent_browser', 'agent_browser_code', 'spawn_agent',
+  'vault_use', 'ipod_vault_use', 'delegate_task', 'local_delegate',
+]);
+// which coding agent a session belongs to, for the lines that name it ({agent} in lines.js)
+const AGENT_NAMES = { claude: 'Claude', pi: 'Pi' };
 const WORKING_EVERY = 20; // say something about progress every N tool calls
 const LONG_JOB_MS = 8 * 60 * 1000; // a job this long (or this busy) earns the whole satellite sequence
 const LONG_JOB_ACTIONS = 50;
@@ -15,7 +23,7 @@ const THINK_SAY = 40000;
 const THINK_LONG = 120000;
 
 export class Brain {
-  constructor({ capri, panel, voice, host, mission, lang = 'fr' }) {
+  constructor({ capri, panel, voice, host, mission, lang = 'en' }) {
     this.capri = capri;
     this.panel = panel;
     this.voice = voice;
@@ -33,16 +41,17 @@ export class Brain {
   }
 
   get t() {
-    return LINES[this.lang] || LINES.fr;
+    return LINES[this.lang] || LINES.en;
   }
 
   session(evt) {
     const id = evt.session_id || 'default';
     let s = this.sessions.get(id);
     if (!s) {
-      s = { id, project: 'Claude', taskStart: null, count: 0, files: new Set(), log: [], working: false, waiting: false };
+      s = { id, project: 'session', taskStart: null, count: 0, files: new Set(), log: [], working: false, waiting: false };
       this.sessions.set(id, s);
     }
+    if (evt.agent) s.agent = AGENT_NAMES[evt.agent] || evt.agent;
     if (evt.cwd) s.project = basename(evt.cwd);
     if (evt.session_title) s.title = evt.session_title;
     s.seen = Date.now();
@@ -53,8 +62,14 @@ export class Brain {
     return [...this.sessions.values()].filter((s) => s.working);
   }
 
+  // which agent a line should name: the session's, or Claude by default (most lines - her
+  // welcome, hooks, Claude's window guide - are about Claude Code specifically regardless)
+  agentName(s) {
+    return s?.agent || 'Claude';
+  }
+
   say(kind, line, s, extra = {}) {
-    return this.panel.say({ kind, line, tag: s ? s.title || s.project : '', ...extra });
+    return this.panel.say({ kind, line: fmt(line, { agent: this.agentName(s) }), tag: s ? s.title || s.project : '', ...extra });
   }
 
   // today's log, for real events only: the demo's don't go on her report card
@@ -68,7 +83,7 @@ export class Brain {
     // the first real Claude Code event that ever reaches her (the demo's don't count)
     if (!this.linked && !evt.demo) {
       this.linked = true;
-      this.onLinked?.();
+      this.onLinked?.(evt.agent);
     }
     const s = this.session(evt);
     const name = evt.hook_event_name;
@@ -218,9 +233,9 @@ export class Brain {
       // you're on another window: she goes and points at Claude's, where the question is
       const win = this.away(s) && this.capri.windows.wins.find((w) => w.id === s.window);
       if (win && this.capri.canPoint(win)) {
-        const quote = [this.t.guide.permissionThere, evt.message].filter(Boolean).join('\n');
+        const quote = [fmt(this.t.guide.permissionThere, { agent: this.agentName(s) }), evt.message].filter(Boolean).join('\n');
         this.say('alert', pick(this.t.permission), s, { quote, hold: null });
-        s.pointedAt = await this.capri.pointAt(win, { label: this.t.guide.labels.claude });
+        s.pointedAt = await this.capri.pointAt(win, { label: s.agent === 'Pi' ? s.agent.toUpperCase() : this.t.guide.labels.claude });
         if (!s.waiting && s.pointedAt) this.capri.stopPointing(); // answered while she was on her way
         return;
       }
@@ -346,9 +361,9 @@ export class Brain {
       ? busy.map((s) => {
         const time = s.taskStart ? ` for ${duration(Date.now() - s.taskStart, 'en')}` : '';
         const last = s.last ? `, last: ${s.last.verb} ${s.last.target}` : '';
-        return `Claude is working on ${s.project}${time} (${plural(s.count, ['action', 'actions'], 'en')} so far${last}).`;
+        return `${this.agentName(s)} is working on ${s.project}${time} (${plural(s.count, ['action', 'actions'], 'en')} so far${last}).`;
       }).join(' ')
-      : 'Claude is idle.';
+      : 'Nothing is running right now.';
     const d = this.mission?.day;
     const today = d ? ` Today: ${d.missions} tasks finished, ${d.actions} actions, ${d.files} files changed, ${d.errors} errors.` : '';
     return now + today;
@@ -419,6 +434,40 @@ export class Brain {
         target = input.description || input.subagent_type; break;
       case 'Skill':
         target = input.skill; break;
+      // pi's builtin tools (lower-case; path/pattern/command fields, not file_path/description)
+      case 'read': case 'write': case 'edit':
+        target = basename(input.path); break;
+      case 'bash': case 'powershell':
+        target = input.command; break;
+      case 'grep':
+        target = input.pattern ? `\u201c${input.pattern}\u201d` : ''; break;
+      case 'find':
+        target = input.pattern || ''; break;
+      case 'ls':
+        target = input.path ? basename(input.path) : '.'; break;
+      // this setup's own tools: the agent browser, the two secret vaults, subagents, T3
+      case 'agent_browser': case 'agent_browser_action': case 'agent_browser_qa':
+        target = Array.isArray(input.args) ? input.args.join(' ') : ''; break;
+      case 'agent_browser_code':
+        target = 'script'; break;
+      case 'agent_browser_tools':
+        target = Array.isArray(input.enable) ? input.enable.join(', ') : 'tools'; break;
+      case 'vault_use': case 'ipod_vault_use':
+        target = input.reason || input.label || input.name || ''; break;
+      case 'vault_list': case 'ipod_vault_list':
+        target = ''; break;
+      case 'spawn_agent':
+        target = input.prompt ? clip(String(input.prompt), 60) : (input.model || ''); break;
+      case 'delegate_task':
+        target = input.title || (typeof input.task === 'string' ? clip(input.task, 60) : ''); break;
+      case 'task_status':
+        target = 'task'; break;
+      case 'local_delegate':
+        target = input.action === 'ask' ? clip(String(input.prompt || ''), 50) : 'status'; break;
+      case 'session_control':
+        target = input.action || ''; break;
+      case 'tool_search':
+        target = input.query || ''; break;
       default:
         if (name.startsWith('mcp__')) {
           // mcp__server__tool -> "server › tool", long generated server ids dropped

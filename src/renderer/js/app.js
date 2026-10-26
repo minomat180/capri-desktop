@@ -55,7 +55,7 @@ async function boot() {
   const panel = new Panel({
     panel: document.getElementById('panel'),
     ticker: document.getElementById('ticker'),
-    labels: LINES[config.lang] || LINES.fr,
+    labels: LINES[config.lang] || LINES.en,
   });
 
   const capri = new Capri({
@@ -176,11 +176,12 @@ async function boot() {
   brain.onTalk = () => chat.start();
   // the first Claude Code event that ever reaches her: so you know it worked
   brain.linked = config.linked;
-  brain.onLinked = () => {
+  brain.onLinked = (agent) => {
     host.setConfig({ linked: true, welcomed: true });
     voice.play('hello');
     capri.perform('hop');
-    panel.say({ kind: 'done', badge: 'LINK', line: brain.t.welcome.linked, hold: 6000 });
+    const name = agent === 'pi' ? 'Pi' : 'Claude';
+    panel.say({ kind: 'done', badge: 'LINK', line: fmt(brain.t.welcome.linked, { agent: name }), hold: 6000 });
   };
 
   // The demo's second half, after its fake Claude session: everything she does on her own, one
@@ -283,7 +284,7 @@ async function boot() {
     if (cfg.scale !== capri.scale) capri.setScale(cfg.scale);
     if (cfg.lang !== brain.lang) {
       brain.lang = cfg.lang;
-      panel.labels = LINES[cfg.lang] || LINES.fr;
+      panel.labels = LINES[cfg.lang] || LINES.en;
       document.documentElement.lang = cfg.lang;
     }
   });

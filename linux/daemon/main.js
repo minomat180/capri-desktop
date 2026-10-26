@@ -168,8 +168,9 @@ const HOST = {
   openMenu: () => openMenu(),
   chatStatus: async () => {
     const models = await refreshModels();
-    if (!models) return { ok: false, error: 'offline' };
-    if (!models.length) return { ok: false, error: 'nomodel' };
+    const host = process.env.OLLAMA_HOST;
+    if (!models) return { ok: false, error: 'offline', host };
+    if (!models.length) return { ok: false, error: 'nomodel', host };
     ollama.warm(pickModel());
     return { ok: true, model: pickModel() };
   },

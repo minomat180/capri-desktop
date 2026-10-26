@@ -1,6 +1,6 @@
 // Talking to her: you type in her panel, and a local model (Ollama, from the main process) answers
 // as her, in writing. The replies are AI-generated, and the panel says so on every chat.
-// Ask her to close an app and she will (Windows): she spots it in what you wrote (or the model names
+// Ask her to close an app and she will: she spots it in what you wrote (or the model names
 // it with a tag in its answer), shows you a button with that app's name, and only your click closes it.
 
 import { pick, fmt } from './util.js';
@@ -10,8 +10,8 @@ const LANGUAGE = { fr: 'French', en: 'English', es: 'Spanish', pt: 'Brazilian Po
 const STAY_MS = 10 * 60 * 1000; // no wandering off mid-conversation
 const LOADING_AFTER_MS = 5000;
 const CLOSE_TAG = /\[\[\s*close\s*:?\s*([^\]]*)\]\]/i; // [[close: AM Music]] at the end of her answer
-// "close", "shut down", "ferme", "quitte", "cierra", "fecha", "закрой"... in any of her languages
-const CLOSE_ASK = /\b(close|shut|quit|kill|exit)|ferm|quitt|coupe|arr[êe]t|cierr|cerra|fech|закр|выключ/i;
+// "close", "shut down", "quit", "kill", "exit"...
+const CLOSE_ASK = /\b(close|shut|quit|kill|exit)\b/i;
 
 export class Chat {
   constructor({ capri, panel, voice, host, brain }) {
@@ -54,14 +54,9 @@ export class Chat {
         face: 'aside',
         guide: true,
         line: offline ? t.offline : t.noModel,
-        quote: offline ? t.offlineHow : t.noModelHow,
-        actions: offline
-          ? [{ id: 'get', label: t.getOllama, primary: true }, { id: 'ok', label: t.ok }]
-          : [{ id: 'ok', label: t.ok, primary: true }],
-        onAction: (id) => {
-          if (id === 'get') host.openOllama();
-          this.panel.hide();
-        },
+        quote: fmt(offline ? t.offlineHow : t.noModelHow, { host: status.host || 'Ollama' }),
+        actions: [{ id: 'ok', label: t.ok, primary: true }],
+        onAction: () => this.panel.hide(),
         hold: null,
       });
       return;
@@ -204,7 +199,7 @@ export class Chat {
     this.listApps();
   }
 
-  // What she can do on the PC: close an app you ask her to (Windows), and nothing else.
+  // What she can do on the PC: close an app you ask her to, and nothing else.
   powers() {
     const cant = 'you can\'t see the user\'s screen or files, and you can\'t open apps or touch anything else on their PC (music, settings, files): if asked, say plainly that you can\'t, in character, and don\'t pretend to.';
     if (!this.apps.length) return [`You can't close apps here, and ${cant}`];
