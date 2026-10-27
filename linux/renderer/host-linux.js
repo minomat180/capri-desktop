@@ -111,6 +111,9 @@
     // only a real click counts: the shell drops anything not marked trusted, and it goes over its pipe
     answerApproval: (id, decision, trusted) => shellPost({ type: 'approval', id, decision, trusted: trusted === true }),
     mediaStatus: call('mediaStatus'),
+    musicSearch: call('musicSearch'),
+    musicPlay: call('musicPlay'),
+    musicOpenSearch: call('musicOpenSearch'),
     closeApp: (name, force) => call('closeApp')({ name, force: Boolean(force) }),
     focusOverlay: (focused) => shellPost({ type: 'keyboard', on: Boolean(focused) }),
   };

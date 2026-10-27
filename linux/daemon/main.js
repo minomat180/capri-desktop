@@ -19,6 +19,7 @@ const agents = require('./agents');
 const apps = require('./apps');
 const launch = require('./launch');
 const media = require('./media');
+const music = require('./music');
 const piChat = require('./pi-chat');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
@@ -250,6 +251,9 @@ const HOST = {
   launchApp: (id) => launch.open(id),
   media: (action) => media.control(String(action)),
   mediaStatus: () => media.status(),
+  musicSearch: (query) => music.search(String(query || '').slice(0, 200)),
+  musicPlay: (id) => music.play(String(id)),
+  musicOpenSearch: (query) => music.openSearch(String(query || '')),
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };
 

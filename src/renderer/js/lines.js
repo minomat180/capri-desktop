@@ -76,6 +76,10 @@ export const LINES = {
       // music (Spotify, or whatever's playing)
       skipped: 'Next up: {track}.', back: 'Rewound to {track}.', paused: 'Paused.', resumed: 'Playing: {track}.',
       noPlayer: 'Nothing’s playing music right now.', mediaFailed: 'The player didn’t listen.',
+      // a song you asked for by name
+      looking: 'Looking up “{song}”…', nowPlaying: 'Now playing: {track}.',
+      notFound2: 'Couldn’t pin “{song}” down, so I opened Spotify’s search for it.',
+      noSpotify: 'Spotify won’t start for me.', searchIt: 'Search in Spotify',
       // opening an app you ask her to open
       opening: 'Opening {app}…',
       notInstalled: 'I can’t find “{app}” in your apps.',

@@ -20,6 +20,10 @@ const MEDIA_ASK = [
   ['pause', /\b(pause|stop)\b.*\b(music|song|spotify|track)\b/i],
   ['play', /\b(resume|unpause|play)\b.*\b(music|spotify)\b/i],
 ];
+const PLAY_TAG = /\[\[\s*play\s*:?\s*([^\]]+)\]\]/i; // [[play: smooth operator sade]]
+// "play smooth operator by sade (on spotify) pls": the song; "play some music" isn't one
+const PLAY_ASK = /\b(?:play|put on|queue up)\s+(.+?)(?:\s+(?:on|in)\s+spotify)?(?:\s+(?:for me|please|pls|plz|now))*\s*[.!?]*$/i;
+const NOT_A_SONG = /^(?:some |the |a |any |this |that |)(?:music|song|songs|tunes?|something|spotify|it|that|this|again|next|previous|one)(?: again| song| one)?$/i;
 const OPEN_TAG = /\[\[\s*open\s*:?\s*([^\]]*)\]\]/i; // [[open: Firefox]]
 const OPEN_ASK = /\b(open|launch|start|run|fire up|bring up)\b/i;
 
@@ -153,10 +157,12 @@ export class Chat {
     this.panel.setFace(mood(answer));
     this.panel.setChatBusy(false);
     // what you asked for first (a small model doesn't always write its tag right), else its tag
-    const music = MEDIA_TAG.exec(res.text)?.[1]?.toLowerCase() || MEDIA_ASK.find(([, re]) => re.test(text))?.[0];
-    const toOpen = !music && (tagged(res.text, OPEN_TAG) || this.askedToOpen(text));
-    const wanted = !music && !toOpen && (this.askedToClose(text) || tagged(res.text));
-    if (music) this.controlMusic(music, answer);
+    const song = askedSong(text) || PLAY_TAG.exec(res.text)?.[1]?.trim();
+    const music = !song && (MEDIA_TAG.exec(res.text)?.[1]?.toLowerCase() || MEDIA_ASK.find(([, re]) => re.test(text))?.[0]);
+    const toOpen = !song && !music && (tagged(res.text, OPEN_TAG) || this.askedToOpen(text));
+    const wanted = !song && !music && !toOpen && (this.askedToClose(text) || tagged(res.text));
+    if (song) this.playSong(song, answer);
+    else if (music) this.controlMusic(music, answer);
     else if (toOpen) this.openApp(toOpen, answer);
     else if (wanted) this.offerClose(wanted, answer);
     this.listApps(); // fresh for the next message
@@ -197,6 +203,51 @@ export class Chat {
       capri.zap(h.x + capri.towardCenter() * 200, h.y - 150);
     }
     this.panel.stream(`${answer}\n${line}`, { done: true });
+  }
+
+  // "play X": she looks it up, plays her best guess, and offers the runners-up (and Spotify's own
+  // search) as buttons in case she guessed wrong.
+  async playSong(song, answer) {
+    const { t, capri, host } = this;
+    this.panel.stream(`${answer}\n${fmt(t.looking, { song })}`);
+    const hits = await host.musicSearch(song).catch(() => []);
+    if (!this.open) return;
+    if (!hits?.length) {
+      const res = await host.musicOpenSearch(song).catch(() => null);
+      this.panel.stream(`${answer}\n${res?.ok ? fmt(t.notFound2, { song }) : t.noSpotify}`, { done: true });
+      return;
+    }
+    const playIt = async (hit) => {
+      this.panel.setActions([]);
+      const res = await host.musicPlay(hit.id).catch(() => null);
+      if (!this.open) return;
+      if (!res?.ok) {
+        this.panel.stream(`${answer}\n${t.noSpotify}`, { done: true });
+        return;
+      }
+      const h = capri.head();
+      capri.zap(h.x + capri.towardCenter() * 200, h.y - 150);
+      const track = res.track || `${hit.artist} – ${hit.name}`;
+      this.panel.stream(`${answer}\n${fmt(t.nowPlaying, { track })}`, { done: true });
+      // wrong one? the others she found, and Spotify's search
+      const others = hits.filter((x) => x.id !== hit.id).slice(0, 2);
+      this.panel.setActions(
+        [
+          ...others.map((x) => ({ id: x.id, label: clipLabel(`${x.name} – ${x.artist}`) })),
+          { id: 'search', label: t.searchIt },
+        ],
+        (id) => {
+          if (id === 'search') {
+            this.panel.setActions([]);
+            host.musicOpenSearch(song);
+            return;
+          }
+          const alt = hits.find((x) => x.id === id);
+          if (alt) playIt(alt);
+        },
+      );
+    };
+    playIt(hits[0]);
   }
 
   // Opening is harmless, so no button: she just does it (only apps from the installed list).
@@ -284,6 +335,7 @@ export class Chat {
       const open = this.apps.map(({ name, label }) => (label && label !== name ? `${name} (${label})` : name)).join(', ');
       out.push(`You can close an app that's open on the user's PC, only when they ask you to. Then say in a few words that you will, and end your answer with [[close: NAME]], NAME being the exact name from this list (the part before the parentheses). They get a button to confirm it, so never say it's already done. Apps open right now: ${open}.`);
     }
+    out.push('You can play a specific song on Spotify: when the user asks for one, say a few words and end your answer with [[play: SONG ARTIST]] (their words, cleaned up; add the artist if you know it). Never claim it is already playing.');
     out.push('You can control the music player (Spotify): when the user asks to skip, go back, pause or resume, say a few words and end your answer with [[media: next]], [[media: previous]], [[media: pause]] or [[media: play]]. Never say which song comes next, you don\'t know until it plays.');
     if (this.music?.track) out.push(`Playing right now (${this.music.state || 'unknown'}): ${this.music.track}.`);
     out.push(`Apart from that, ${cant}`);
@@ -330,6 +382,17 @@ function tagged(text, re = CLOSE_TAG) {
   const name = tag[1].trim() || text.slice(tag.index + tag[0].length).split('\n')[0].replace(/^[\s:.]+|[\s.!]+$/g, '');
   return name || null;
 }
+
+// "play smooth operator by sade" -> "smooth operator sade"; null if it isn't a song request
+function askedSong(text) {
+  const m = PLAY_ASK.exec(String(text).trim());
+  if (!m) return null;
+  const song = m[1].replace(/\bby\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (!song || NOT_A_SONG.test(song) || song.length < 2) return null;
+  return song;
+}
+
+const clipLabel = (s) => (s.length > 34 ? `${s.slice(0, 33)}…` : s);
 
 const simple = (text) => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
