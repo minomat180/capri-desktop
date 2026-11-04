@@ -251,8 +251,10 @@ const HOST = {
   launchApp: (id) => launch.open(id),
   media: (action) => media.control(String(action)),
   mediaStatus: () => media.status(),
-  musicSearch: (query) => music.search(String(query || '').slice(0, 200)),
-  musicPlay: (id) => music.play(String(id)),
+  musicSearch: (arg) => (typeof arg === 'object' && arg
+    ? music.search(String(arg.query || '').slice(0, 200), arg.kind)
+    : music.search(String(arg || '').slice(0, 200))),
+  musicPlay: (uri) => music.play(String(uri)),
   musicOpenSearch: (query) => music.openSearch(String(query || '')),
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };

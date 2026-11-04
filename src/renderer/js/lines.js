@@ -80,6 +80,7 @@ export const LINES = {
       looking: 'Looking up “{song}”…', nowPlaying: 'Now playing: {track}.',
       notFound2: 'Couldn’t pin “{song}” down, so I opened Spotify’s search for it.',
       noSpotify: 'Spotify won’t start for me.', searchIt: 'Search in Spotify',
+      found: 'Here’s what I found for “{song}”. Pick one.', playlist: 'the “{name}” playlist',
       // opening an app you ask her to open
       opening: 'Opening {app}…',
       notInstalled: 'I can’t find “{app}” in your apps.',
