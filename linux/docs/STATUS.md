@@ -31,12 +31,17 @@ Last updated: 2026-11-04.
 
 Mino's call (2026-11-04) on upstream's newer features:
 
-**Wanted**
-- `pc.js` — she feels the PC: CPU, battery, charger, network, USB, games. Needs a Linux `host.cpu`.
-- `look.js` — looks at the screen and comments. Needs a Wayland grab (`grim`) instead of Windows capture.
-- `reminders.js` — "remind me in 20 min to…", kept across restarts. Mostly portable (renderer-side).
-- `files.js` — find files / open folders. Windows-index based upstream; needs a Linux rewrite (`fd`/`plocate`).
-- Pet her (stroke her mane, she purrs) — renderer-only, should port cleanly.
+**Wanted** (being done on `feature/upstream-features`)
+- [x] **Pet her** — stroke her mane, she purrs. Ported without the bond system.
+- [x] **Reminders** — "remind me in 20 min to…"; she asks when if you didn't say, keeps them across
+  restarts, and brings up ones that came due while she was off. Upstream's parser (English).
+- [x] **Feels your PC** — own Linux source (`linux/daemon/pc.js`: /proc/stat, /sys/class/power_supply
+  across BAT0+BAT1, /sys/class/net, lsblk, /sys/bus/usb, mango for a fullscreen game) polled every
+  4 s; renderer `src/renderer/js/pc.js` rewritten for it. Off via config `pcReact`.
+- [ ] **Looks at your screen** — needs a Wayland grab (`grim`) and a vision-capable chat path
+  (our chat is `pi -p`, text only today). Not started.
+- [ ] **Find your files** — Windows-index based upstream; needs a Linux rewrite (`fd`/`plocate`).
+  Not started.
 
 **Not wanted**
 - `bond.js` — anything that changes with time/relationship. **No evolving personality.** (Verified:

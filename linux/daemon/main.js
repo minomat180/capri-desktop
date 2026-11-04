@@ -17,6 +17,7 @@ const config = require('./config');
 const mango = require('./mango');
 const agents = require('./agents');
 const apps = require('./apps');
+const pc = require('./pc');
 const launch = require('./launch');
 const media = require('./media');
 const music = require('./music');
@@ -244,6 +245,7 @@ const HOST = {
   },
   chatStop: (id) => chats.get(id)?.abort(),
   openOllama: () => {},
+  pcState: () => pc.state(),
   openApps: async () => (await apps.list().catch(() => [])).map(appInfo),
   findApp: async (wanted) => appInfo(await apps.find(wanted).catch(() => null)),
   installedApps: () => launch.installed().map(({ id, name }) => ({ id, name })),

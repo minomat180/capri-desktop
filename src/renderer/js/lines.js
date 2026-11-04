@@ -165,6 +165,34 @@ export const LINES = {
       afterInstall: 'Once you have it, right-click me › “Install Claude Code hooks”.',
       failed: 'I couldn’t plug in: {error}',
     },
+    // what she feels of your PC (pc.js)
+    pc: {
+      hot: ['Your processor is maxed out. I’m heating up too.', '{cpu}% CPU. It’s getting hot in here.', 'Things are heating up! What are you running?'],
+      cool: ['Phew. Cooling down.'],
+      low: ['Battery at {level}%. I won’t last long.', 'Only {level}% battery left. Plug me in, choom.'],
+      critical: ['{level}%… fading out…', 'Battery at {level}%. Last call, choom.'],
+      charging: ['Ah, power. Thanks.', 'Plugged in. I live again.'],
+      unplugged: ['On battery. Saving my lightning.', 'Unplugged. Careful now.'],
+      offline: ['No network! We’re cut off from the Net.', 'Connection lost. It’s just me now.'],
+      online: ['Network’s back. The Net is ours.', 'Reconnected.'],
+      usb: ['Something new: {drive}. Let me see.', 'Ooh, {drive} just showed up.'],
+      usbOut: ['Your stick’s gone. Good thing I got out.'],
+      plugIn: {
+        phone: ['Your phone? Hi there, little device.', 'A phone plugged in. Can I look inside? No? Shame.'],
+        controller: ['A controller! What are we playing?', 'Controller plugged in. Show me what you’ve got.'],
+        audio: ['Headphones? Play me some music.', 'More sound. Love it.'],
+        camera: ['A camera? Smile, choom.'],
+        input: ['New toy: {name}. I’ve got my eye on it.'],
+        device: ['A new device: {name}. Taking a look.', 'Oh, {name}. Welcome in.'],
+      },
+      plugOut: {
+        phone: ['Your phone’s gone.', 'No more phone. I’ll miss it. A little.'],
+        controller: ['Controller unplugged. Game over?'],
+        device: ['{name}, unplugged.'],
+      },
+      game: ['{game}? I’ll let you play. Make me proud.', '{game}, huh? I’ll get out of the way. Show them.'],
+      gameBack: ['So, did you win?', 'Done playing? Tell me everything.'],
+    },
     // reminders (reminders.js): "remind me in 20 minutes to take out the laundry"
     remind: {
       now: ['Hey. You asked me to remind you: {text}.', 'It’s time: {text}.', 'Reminder, choom: {text}.'],

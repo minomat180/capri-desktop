@@ -7,6 +7,7 @@ import { Brain } from './brain.js';
 import { Guide } from './guide.js';
 import { Mission } from './mission.js';
 import { Chat } from './chat.js';
+import { Pc } from './pc.js';
 import { Reminders, clock } from './reminders.js';
 import { LINES } from './lines.js';
 import { pick, fmt } from './util.js';
@@ -176,6 +177,10 @@ async function boot() {
   const chat = new Chat({ capri, panel, voice, host, brain });
   brain.onTalk = () => chat.start();
   brain.isChatting = () => chat.open;
+
+  // Your PC as she feels it (pc.js): the processor, the battery, the network, a stick, a game.
+  const pc = new Pc({ capri, panel, brain, host, voice, chat, guide });
+  pc.enabled = config.pcReact !== false;
 
   // Reminders she keeps for you (reminders.js): asked for in her chat, kept in her settings, and
   // brought up when they're due even if she was off at the time.
@@ -410,7 +415,8 @@ async function boot() {
   });
 
   host.onConfig((cfg) => {
-    if (cfg.reminders) reminders.sync(cfg.reminders); // one may have been cancelled elsewhere
+    if (cfg.reminders) reminders.sync(cfg.reminders);
+    if ('pcReact' in cfg) pc.enabled = cfg.pcReact !== false; // one may have been cancelled elsewhere
     voice.configure(cfg);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;

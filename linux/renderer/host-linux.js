@@ -99,6 +99,7 @@
     chatStop: (id) => { call('chatStop')(id); },
     onChatDelta: on('chat:delta'),
     openOllama: () => { call('openOllama')(); },
+    pcState: call('pcState'),
     openApps: call('openApps'),
     findApp: call('findApp'),
     installedApps: call('installedApps'),
