@@ -117,6 +117,7 @@
     speak: call('speak'),
     voiceStatus: call('voiceStatus'),
     voices: call('voices'),
+    prerender: call('prerender'),
     closeApp: (name, force) => call('closeApp')({ name, force: Boolean(force) }),
     focusOverlay: (focused) => shellPost({ type: 'keyboard', on: Boolean(focused) }),
   };

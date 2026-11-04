@@ -190,6 +190,26 @@ const openPath = (p) => spawn('xdg-open', [p], { detached: true, stdio: 'ignore'
 
 const appInfo = (app) => app && { name: app.process, label: app.name };
 
+let prerendering = false;
+
+// Every fixed thing she can say (src/renderer/js/lines.js), for pre-rendering her voice.
+function fixedLines() {
+  const out = new Set();
+  const walk = (v) => {
+    if (typeof v === 'string') { const t = v.trim(); if (t && !t.includes('{') && t.length > 1) out.add(t); }
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  try {
+    const src = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'js', 'lines.js'), 'utf8');
+    // the file is an ES module; read it as data rather than importing it into the service
+    walk(JSON.parse(JSON.stringify(eval(`(${src.replace(/^export const LINES =/m, '').replace(/;\s*$/, '')})`))));
+  } catch (err) {
+    log(`could not read her lines: ${err.message}`);
+  }
+  return [...out];
+}
+
 const HOST = {
   getConfig: () => rendererConfig(),
   setConfig: (patch) => updateConfig(patch || {}),
@@ -260,6 +280,16 @@ const HOST = {
   speak: (text) => speech.say(text),
   voiceStatus: () => speech.status(),
   voices: () => speech.voices(),
+  prerender: () => {
+    if (prerendering) return { ok: false, error: 'already running' };
+    prerendering = true;
+    const lines = fixedLines();
+    speech.prerender(lines, (done, total) => emit('voice:prerender', { done, total }))
+      .then((r) => log(`prerender: ${r.made} made, ${r.had} already there, ${r.total} lines`))
+      .catch((err) => log(`prerender failed: ${err.message}`))
+      .finally(() => { prerendering = false; });
+    return { ok: true, lines: lines.length };
+  },
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };
 
@@ -460,9 +490,10 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // her spoken lines (linux/daemon/voice.js), kept in a scratch dir, not in the repo
+  // her spoken lines (linux/daemon/voice.js), cached under ~/.cache/capri, not in the repo
   if (req.method === 'GET' && p.startsWith('/voice/')) {
-    const file = speech.filePath(path.basename(p));
+    const [, , dir, name] = p.split('/');
+    const file = speech.filePath(dir || '', name || '');
     if (!file) return send(res, 404, { ok: false });
     res.writeHead(200, { 'content-type': 'audio/wav', 'cache-control': 'no-store' });
     return fs.createReadStream(file).pipe(res);

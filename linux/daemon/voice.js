@@ -1,14 +1,18 @@
 'use strict';
 
-// Her voice: the lines she says, spoken out loud (Piper, local, on this machine).
+// Her voice: the lines she says, spoken out loud, on this machine.
 //
-// linux/tts/piper-server.py keeps the voice model loaded (loading it costs ~10 s, speaking a line
-// ~0.7 s) and writes one WAV per line into a scratch dir. This module owns that process: it starts
-// on the first line she speaks, not at boot, so nothing is paid for if the voice is off, and it is
-// restarted if it dies. The renderer fetches the WAV and plays it through her existing volume and
-// mute (voice.js), so nothing here ever touches the speakers.
+// Kokoro (af_heart) sounds right but costs ~5 s a line on this laptop's CPU, so every line is
+// cached by its text: her fixed lines (223 of them, pre-rendered with `capri-ctl voice prerender`)
+// play instantly, and anything she repeats is free. Only a new chat answer waits.
 //
-// Off by default: config `voice` (false), `voiceModel` (a file in linux/tts/voices).
+// linux/tts/tts-server.py keeps the model loaded (loading costs 4-11 s) and writes one WAV per
+// line. This module owns that process: it starts on her first spoken line, not at boot, so
+// nothing is paid for while the voice is off, and it restarts if it dies. The renderer fetches the
+// WAV and plays it through her existing volume and mute (src/renderer/js/voice.js), so nothing
+// here ever touches the speakers.
+//
+// Off by default: config `voice` (false), `voiceEngine` ('kokoro'), `voiceModel` ('af_heart').
 
 const fs = require('fs');
 const os = require('os');
@@ -20,34 +24,47 @@ const config = require('./config');
 const ROOT = path.join(__dirname, '..', '..');
 const TTS = path.join(ROOT, 'linux', 'tts');
 const PY = path.join(TTS, 'venv', 'bin', 'python');
-const SERVER = path.join(TTS, 'piper-server.py');
+const SERVER = path.join(TTS, 'tts-server.py');
 const VOICES = path.join(TTS, 'voices');
-const OUT = path.join(os.tmpdir(), 'capri-voice');
-const KEEP = 20; // WAVs kept around; the renderer may still be fetching the last few
+// spoken lines, kept between runs: ~40 KB each, her whole fixed set is about 10 MB
+const CACHE = path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'capri', 'voice');
+
+const KOKORO = ['af_heart', 'af_bella', 'af_nicole', 'af_sky', 'af_aoede', 'af_kore', 'af_nova',
+  'af_river', 'af_sarah', 'af_jessica', 'af_alloy', 'bf_emma', 'bf_alice', 'bf_isabella', 'bf_lily'];
 
 let child = null;
-let ready = null;        // resolves once the model is loaded
+let ready = null;        // resolves true once the model is loaded
 let pending = new Map(); // id -> { resolve, timer }
 let buffer = '';
 let starting = false;
-let failed = null;       // why the voice is off, if it is
+let failed = null;
 
 const log = (...a) => console.log('[voice]', ...a);
+const cfg = () => {
+  const c = config.load();
+  return { engine: c.voiceEngine || 'kokoro', voice: c.voiceModel || 'af_heart', on: Boolean(c.voice) };
+};
 
-function voiceFile() {
-  const name = config.load().voiceModel || 'en_US-amy-medium';
-  const file = path.join(VOICES, `${path.basename(name)}.onnx`);
-  return fs.existsSync(file) ? file : null;
+// Where a line lives on disk: same voice + same words = same file, always.
+function cacheFile(text, { engine, voice }) {
+  const key = crypto.createHash('sha256').update(`${engine}\u0000${voice}\u0000${text}`).digest('hex').slice(0, 24);
+  return path.join(CACHE, `${engine}-${voice}`, `${key}.wav`);
 }
 
-// Installed voices, for her menu: [{ id, label }]
+function installed() {
+  if (!fs.existsSync(PY)) return false;
+  const { engine, voice } = cfg();
+  return engine === 'kokoro'
+    ? fs.existsSync(path.join(VOICES, 'kokoro-v1.0.onnx')) && fs.existsSync(path.join(VOICES, 'voices-v1.0.bin'))
+    : fs.existsSync(path.join(VOICES, `${path.basename(voice)}.onnx`));
+}
+
 function voices() {
+  const { engine } = cfg();
+  if (engine === 'kokoro') return KOKORO.map((id) => ({ id, label: `${id.slice(3)} (${id[0] === 'a' ? 'US' : 'GB'})` }));
   try {
-    return fs.readdirSync(VOICES).filter((f) => f.endsWith('.onnx')).sort().map((f) => {
-      const id = f.replace(/\.onnx$/, '');
-      const [locale, who] = id.split('-');
-      return { id, label: `${who.replace(/_/g, ' ')} (${locale.replace('_', '-')})` };
-    });
+    return fs.readdirSync(VOICES).filter((f) => f.endsWith('.onnx') && !f.startsWith('kokoro'))
+      .map((f) => ({ id: f.replace(/\.onnx$/, ''), label: f.replace(/\.onnx$/, '') }));
   } catch {
     return [];
   }
@@ -63,13 +80,14 @@ function stop() {
 
 function start() {
   if (child || starting) return ready;
-  const model = voiceFile();
-  if (!fs.existsSync(PY)) { failed = 'piper is not installed (linux/tts/venv)'; return null; }
-  if (!model) { failed = 'no voice model in linux/tts/voices'; return null; }
+  const { engine, voice } = cfg();
+  if (!fs.existsSync(PY)) { failed = 'the tts venv is missing (see linux/tts/README.md)'; return null; }
+  if (!installed()) { failed = `no model for ${engine} in linux/tts/voices`; return null; }
   starting = true;
   failed = null;
   ready = new Promise((resolve) => {
-    child = spawn(PY, [SERVER, model], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const voiceArg = engine === 'kokoro' ? voice : path.join(VOICES, `${path.basename(voice)}.onnx`);
+    child = spawn(PY, [SERVER, '--engine', engine, '--voice', voiceArg], { stdio: ['pipe', 'pipe', 'pipe'] });
     let settled = false;
     const done = (ok) => { if (!settled) { settled = true; starting = false; resolve(ok); } };
     child.stdout.on('data', (chunk) => {
@@ -80,65 +98,91 @@ function start() {
         buffer = buffer.slice(nl + 1);
         let msg;
         try { msg = JSON.parse(line); } catch { continue; }
-        if (msg.ready) { log(`ready: ${msg.voice}`); done(true); continue; }
+        if ('ready' in msg) {
+          if (msg.ready) log(`ready: ${msg.engine}/${msg.voice}`);
+          else failed = msg.error || 'the voice would not load';
+          done(Boolean(msg.ready));
+          continue;
+        }
         const p = pending.get(msg.id);
         if (p) { clearTimeout(p.timer); pending.delete(msg.id); p.resolve(msg.ok ? msg : null); }
       }
     });
     child.stderr.on('data', (c) => log(String(c).trim()));
     child.on('exit', (code, signal) => {
-      log(`piper exited (${signal || code})`);
+      log(`tts exited (${signal || code})`);
       child = null;
-      if (!settled) { failed = 'piper would not start'; done(false); }
+      if (!settled) { failed = 'the voice would not start'; done(false); }
       stop();
     });
-    setTimeout(() => { if (!settled) { failed = 'piper took too long to load'; done(false); } }, 60000);
+    setTimeout(() => { if (!settled) { failed = 'the voice took too long to load'; done(false); } }, 90000);
   });
   return ready;
 }
 
-function sweep() {
-  try {
-    const files = fs.readdirSync(OUT).filter((f) => f.endsWith('.wav'))
-      .map((f) => ({ f, t: fs.statSync(path.join(OUT, f)).mtimeMs })).sort((a, b) => b.t - a.t);
-    for (const { f } of files.slice(KEEP)) fs.unlinkSync(path.join(OUT, f));
-  } catch { /* nothing to sweep */ }
-}
+const clean = (text) => String(text || '').replace(/\s+/g, ' ').trim();
 
-// Her line as a WAV the renderer can fetch: { url, seconds } or null (voice off, or it failed).
-async function say(text) {
-  const cfg = config.load();
-  if (!cfg.voice) return null;
-  const line = String(text || '').replace(/\s+/g, ' ').trim();
+// Make the WAV for a line (or reuse the cached one). Resolves the file path, or null.
+async function render(text, opts = {}) {
+  const line = clean(text);
   if (!line) return null;
+  const where = cfg();
+  const file = cacheFile(line, where);
+  if (fs.existsSync(file)) return file;
+  if (!opts.force && !where.on) return null;
   if (!child && !(await start())) return null;
-  else if (!(await ready)) return null;
+  if (!(await ready)) return null;
   const id = crypto.randomBytes(8).toString('hex');
-  const file = path.join(OUT, `${id}.wav`);
+  const tmp = file.replace(/\.wav$/, `.${id}.part.wav`); // .wav: soundfile picks its format from the extension
   const res = await new Promise((resolve) => {
-    const timer = setTimeout(() => { pending.delete(id); resolve(null); }, 15000);
+    const timer = setTimeout(() => { pending.delete(id); resolve(null); }, 60000);
     pending.set(id, { resolve, timer });
-    try { child.stdin.write(`${JSON.stringify({ id, text: line, path: file })}\n`); }
+    try { child.stdin.write(`${JSON.stringify({ id, text: line, path: tmp })}\n`); }
     catch { clearTimeout(timer); pending.delete(id); resolve(null); }
   });
-  if (!res) return null;
-  sweep();
-  return { url: `/voice/${id}.wav`, seconds: res.seconds, ms: res.ms };
+  if (!res) { try { fs.unlinkSync(tmp); } catch { /* nothing to clean */ } return null; }
+  try { fs.renameSync(tmp, file); } catch { return null; } // whole file or none: never a half-written one
+  return file;
 }
 
-// The WAV behind /voice/<id>.wav, or null if that isn't one of ours.
-function filePath(name) {
-  if (!/^[0-9a-f]{16}\.wav$/.test(name)) return null;
-  const file = path.join(OUT, name);
-  return fs.existsSync(file) ? file : null;
+// Her line, as something the renderer can fetch: { url, cached } or null (voice off / it failed).
+async function say(text) {
+  if (!cfg().on) return null;
+  const line = clean(text);
+  const where = cfg();
+  const wanted = cacheFile(line, where);
+  const had = fs.existsSync(wanted);
+  const file = await render(line);
+  if (!file) return null;
+  return { url: `/voice/${path.basename(path.dirname(file))}/${path.basename(file)}`, cached: had };
 }
 
-const status = () => ({
-  on: Boolean(config.load().voice),
-  model: config.load().voiceModel || 'en_US-amy-medium',
-  installed: Boolean(fs.existsSync(PY) && voiceFile()),
-  running: Boolean(child),
-  error: failed,
-});
+// Her fixed lines, made once so they play instantly afterwards. onStep(done, total, text).
+async function prerender(lines, onStep) {
+  const todo = [...new Set(lines.map(clean).filter(Boolean))];
+  let made = 0;
+  let had = 0;
+  for (const [i, line] of todo.entries()) {
+    const existed = fs.existsSync(cacheFile(line, cfg()));
+    const file = await render(line, { force: true });
+    if (existed) had += 1; else if (file) made += 1;
+    onStep?.(i + 1, todo.length, line);
+  }
+  return { total: todo.length, made, had };
+}
 
-module.exports = { say, voices, status, filePath, stop, start };
+// The WAV behind /voice/<dir>/<file>.wav, or null if that isn't one of ours.
+function filePath(dir, name) {
+  if (!/^[a-z]+-[A-Za-z0-9_-]+$/.test(dir) || !/^[0-9a-f]{24}\.wav$/.test(name)) return null;
+  const file = path.join(CACHE, dir, name);
+  return file.startsWith(CACHE) && fs.existsSync(file) ? file : null;
+}
+
+function status() {
+  const { engine, voice, on } = cfg();
+  let cached = 0;
+  try { cached = fs.readdirSync(path.join(CACHE, `${engine}-${voice}`)).filter((f) => f.endsWith('.wav')).length; } catch { /* none yet */ }
+  return { on, engine, voice, installed: installed(), running: Boolean(child), cached, error: failed };
+}
+
+module.exports = { say, prerender, voices, status, filePath, stop, start };

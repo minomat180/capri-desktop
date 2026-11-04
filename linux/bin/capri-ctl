@@ -3,7 +3,7 @@
 #   capri-ctl stow|show|hide|menu|status|teleport|satellite|demo|report|chat|quit
 #   capri-ctl watch     stream her state as JSON lines (for the waybar module)
 #   capri-ctl running   exit 0 if she's up
-#   capri-ctl voice [on|off|status|list|<voice-id>|say <text>]
+#   capri-ctl voice [on|off|status|list|prerender|<voice-id>|say <text>]
 dir=${XDG_RUNTIME_DIR:-/tmp}/capri
 port=$(cat "$dir/port" 2>/dev/null || echo 47823)
 token=$(cat "$dir/token" 2>/dev/null)
@@ -19,6 +19,7 @@ case "$cmd" in
       list)   host voices null | tr ',' '\n' | sed -n 's/.*"id":"\([^"]*\)".*/  \1/p' ;;
       on)     host setConfig '{"voice":true}' >/dev/null && echo "her voice is on" ;;
       off)    host setConfig '{"voice":false}' >/dev/null && echo "her voice is off" ;;
+      prerender) host prerender null; echo; echo "making her fixed lines; watch: capri-ctl voice status" ;;
       say)    shift 2; host speak "$(printf '%s' "$*" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"; echo ;;
       *)      host setConfig "{\"voiceModel\":\"$2\",\"voice\":true}" >/dev/null && echo "her voice: $2" ;;
     esac ;;

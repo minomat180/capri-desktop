@@ -4,11 +4,23 @@ Off by default. Turn it on: `capri-ctl voice on`, off again with `capri-ctl voic
 `capri-ctl voice list` shows the installed voices, `capri-ctl voice <id>` picks one, and
 `capri-ctl voice say "..."` makes one line without her saying it.
 
+She speaks with **Kokoro af_heart** (Apache-2.0). It sounds far better than Piper but costs about
+5 s a line on this laptop's CPU, so **every line is cached by its text** under
+`~/.cache/capri/voice/`: her 169 fixed lines are made once with `capri-ctl voice prerender`
+(~12 min, ~7 MB) and play instantly forever after. Only a new chat answer waits.
+
+Piper is still supported (`voiceEngine: 'piper'` in the config) if you ever want speed over sound.
+
 Nothing here is in git (the venv is 200 MB, each voice ~60 MB). To set it up:
 
 ```sh
-python3 -m venv linux/tts/venv && linux/tts/venv/bin/pip install piper-tts
+python3 -m venv linux/tts/venv
+linux/tts/venv/bin/pip install kokoro-onnx soundfile piper-tts
 cd linux/tts/voices
+# Kokoro (what she uses): the model and its voices
+curl -fLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -fLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+# Piper (optional, the fast flat one)
 # one of: en/en_US/amy/medium/en_US-amy-medium, en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium,
 #         en/en_US/hfc_female/medium/en_US-hfc_female-medium, en/en_GB/cori/high/en_GB-cori-high
 p=en/en_US/amy/medium/en_US-amy-medium; n=$(basename $p)
@@ -17,6 +29,12 @@ curl -fL -o $n.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/ma
 ```
 
 Measured on this ThinkPad T480 (4c/8t, no GPU), one 1-2 sentence line:
+
+| Kokoro | load | per line | cached |
+|---|---|---|---|
+| af_heart (hers) | 5 s | ~5 s | **0 ms** |
+
+Piper, for comparison:
 
 | voice | load | per line |
 |---|---|---|
