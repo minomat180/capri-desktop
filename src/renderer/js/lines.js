@@ -165,6 +165,12 @@ export const LINES = {
       afterInstall: 'Once you have it, right-click me › “Install Claude Code hooks”.',
       failed: 'I couldn’t plug in: {error}',
     },
+    // petting her: the pointer going back and forth over her mane
+    pet: {
+      low: ['Hey… what are you doing?', 'Okay… fine. Just a little.'],
+      high: ['Mm. Keep going.', 'There. Right there.', 'I’m not purring. That’s the fan.'],
+      enough: ['That’s enough.', 'Hands off.', 'Enough. I’m not a cat.'],
+    },
     online: ['Capri online.', 'Back on your desktop, choom.'],
     status: '{agent} has been working on {project} for {time}.',
     last: 'Last action: {action}',

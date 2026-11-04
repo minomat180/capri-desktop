@@ -175,6 +175,24 @@ async function boot() {
   const chat = new Chat({ capri, panel, voice, host, brain });
   brain.onTalk = () => chat.start();
   brain.isChatting = () => chat.open;
+
+  // Petted (your pointer back and forth over her mane): she purrs and says something now and then.
+  // Too long and she's had enough: a zap at your pointer.
+  let petTalk = 0;
+  capri.onPet = (phase) => {
+    const t = brain.t.pet;
+    const quiet = !chat.open && (!panel.visible || ['idle', 'info'].includes(panel.current?.kind));
+    if (phase === 'start') {
+      const now = performance.now();
+      if (quiet && now - petTalk > 90000) {
+        petTalk = now;
+        panel.say({ kind: 'info', face: 'smug', line: pick(t.high), hold: 3000 });
+      }
+    } else if (phase === 'enough') {
+      if (quiet) panel.say({ kind: 'info', face: 'many', line: pick(t.enough), hold: 3000 });
+      if (!mouse || !capri.zap(mouse.x, mouse.y)) capri.perform('flinch');
+    }
+  };
   // the first Claude Code event that ever reaches her: so you know it worked
   brain.linked = config.linked;
   brain.onLinked = (agent) => {
