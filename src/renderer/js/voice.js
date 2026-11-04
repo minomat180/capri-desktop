@@ -61,6 +61,36 @@ export class Voice {
     }
   }
 
+  // Her voice (Linux): a line spoken by the local model, played through the same gain as her
+  // blips, so her volume and mute apply. One line at a time: a new one cuts off the last.
+  async speak(url) {
+    if (this.muted || !url) return 0;
+    const ctx = this.ensure();
+    if (ctx.state === 'suspended') await ctx.resume();
+    try {
+      const data = await (await fetch(url)).arrayBuffer();
+      const buffer = await ctx.decodeAudioData(data);
+      this.hush();
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(this.master);
+      src.start();
+      this.speaking = src;
+      src.onended = () => { if (this.speaking === src) this.speaking = null; };
+      return buffer.duration;
+    } catch (err) {
+      console.warn('[capri] could not speak', err);
+      return 0;
+    }
+  }
+
+  // Stop her mid-sentence (a new line, or she's told to be quiet).
+  hush() {
+    if (!this.speaking) return;
+    try { this.speaking.stop(); } catch { /* already done */ }
+    this.speaking = null;
+  }
+
   play(cue, opts = {}) {
     if (this.muted) return;
     const ctx = this.ensure();

@@ -114,6 +114,9 @@
     musicSearch: call('musicSearch'),
     musicPlay: call('musicPlay'),
     musicOpenSearch: call('musicOpenSearch'),
+    speak: call('speak'),
+    voiceStatus: call('voiceStatus'),
+    voices: call('voices'),
     closeApp: (name, force) => call('closeApp')({ name, force: Boolean(force) }),
     focusOverlay: (focused) => shellPost({ type: 'keyboard', on: Boolean(focused) }),
   };

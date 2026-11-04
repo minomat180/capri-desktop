@@ -20,6 +20,7 @@ const apps = require('./apps');
 const launch = require('./launch');
 const media = require('./media');
 const music = require('./music');
+const speech = require('./voice');
 const piChat = require('./pi-chat');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
@@ -256,6 +257,9 @@ const HOST = {
     : music.search(String(arg || '').slice(0, 200))),
   musicPlay: (uri) => music.play(String(uri)),
   musicOpenSearch: (query) => music.openSearch(String(query || '')),
+  speak: (text) => speech.say(text),
+  voiceStatus: () => speech.status(),
+  voices: () => speech.voices(),
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };
 
@@ -454,6 +458,14 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       return send(res, 400, { ok: false, error: err.message });
     }
+  }
+
+  // her spoken lines (linux/daemon/voice.js), kept in a scratch dir, not in the repo
+  if (req.method === 'GET' && p.startsWith('/voice/')) {
+    const file = speech.filePath(path.basename(p));
+    if (!file) return send(res, 404, { ok: false });
+    res.writeHead(200, { 'content-type': 'audio/wav', 'cache-control': 'no-store' });
+    return fs.createReadStream(file).pipe(res);
   }
 
   if (req.method === 'GET' && p.startsWith('/app/')) return serveFile(res, decodeURIComponent(p.slice(5)));

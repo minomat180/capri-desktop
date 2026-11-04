@@ -166,6 +166,15 @@ async function boot() {
   };
   panel.onChar = (kind) => voice.play('blip', { mood: kind });
   panel.onTalk = (talking) => talking && capri.perform('talk');
+  // Her voice (Linux): the line she just put up, spoken out loud. Off unless `voice` is on in her
+  // config; the service answers with nothing when it's off, so this costs nothing either way.
+  if (host.speak) {
+    panel.onSay = async (text, kind) => {
+      if (kind === 'chat') return; // her chat answers are streamed, speakChat handles those
+      const said = await host.speak(text).catch(() => null);
+      if (said?.url) voice.speak(said.url);
+    };
+  }
   capri.onMenu = () => host.openMenu();
 
   // Her guide (guide.js): her welcome on first launch, and "How does it work?" in her menu,

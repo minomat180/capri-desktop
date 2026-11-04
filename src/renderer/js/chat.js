@@ -157,6 +157,7 @@ export class Chat {
     }
     const answer = clean(res.text) || '…';
     this.history.push({ role: 'assistant', content: answer });
+    this.speak(answer);
     this.panel.stream(answer, { done: true });
     this.panel.setFace(mood(answer));
     this.panel.setChatBusy(false);
@@ -176,6 +177,13 @@ export class Chat {
     else if (toOpen) this.openApp(toOpen, answer);
     else if (wanted) this.offerClose(wanted, answer);
     this.listApps(); // fresh for the next message
+  }
+
+  // Her answer out loud, once it's whole (Linux; nothing happens if her voice is off).
+  async speak(text) {
+    if (!this.host.speak) return;
+    const said = await this.host.speak(text).catch(() => null);
+    if (said?.url && this.open) this.voice.speak(said.url);
   }
 
   listApps() {

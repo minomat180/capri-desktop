@@ -52,6 +52,7 @@ export class Panel {
     this.view = { w: innerWidth, h: innerHeight };
     this.onChar = null;    // (mood) => void, for the voice blips
     this.onTalk = null;    // (talking: boolean) => void
+    this.onSay = null;     // (text, kind) => void, a line appeared: her voice reads it (app.js)
     this.suspended = false;
     this.tickerAction = null;
     this.tickerShownAt = 0;
@@ -161,6 +162,7 @@ export class Panel {
     this.replayEnter();
     this.place();
     this.decode(msg.line || '', msg.kind);
+    if (msg.line) this.onSay?.(msg.line, msg.kind);
 
     if (msg.hold) this.hideTimer = setTimeout(() => this.hide(), msg.hold);
     return true;
