@@ -7,6 +7,7 @@ import { Brain } from './brain.js';
 import { Guide } from './guide.js';
 import { Mission } from './mission.js';
 import { Chat } from './chat.js';
+import { Reminders, clock } from './reminders.js';
 import { LINES } from './lines.js';
 import { pick, fmt } from './util.js';
 
@@ -175,6 +176,56 @@ async function boot() {
   const chat = new Chat({ capri, panel, voice, host, brain });
   brain.onTalk = () => chat.start();
   brain.isChatting = () => chat.open;
+
+  // Reminders she keeps for you (reminders.js): asked for in her chat, kept in her settings, and
+  // brought up when they're due even if she was off at the time.
+  const SNOOZE_MS = 10 * 60 * 1000;
+  const reminders = new Reminders({ host, list: config.reminders || [] });
+  chat.reminders = reminders;
+  const startedAt = Date.now();
+  const remind = async (r) => {
+    const t = brain.t.remind;
+    const time = clock(r.at, brain.lang);
+    const missed = r.at < startedAt - 60000;
+    const line = missed
+      ? fmt(r.text ? t.missed : t.missedBare, { text: r.text, time })
+      : fmt(pick(r.text ? t.now : t.nowBare), { text: r.text });
+    let answered = false;
+    const onAction = (id) => {
+      answered = true;
+      panel.setActions([]);
+      if (id === 'snooze') {
+        reminders.snooze(r.id, SNOOZE_MS);
+        panel.say({ kind: 'info', face: 'smug', line: t.snoozed, hold: 2500 });
+        return;
+      }
+      reminders.remove(r.id);
+      panel.say({ kind: 'info', face: 'smug', line: pick(t.doneLine), hold: 2500 });
+    };
+    const actions = [{ id: 'done', label: t.done, primary: true }, { id: 'snooze', label: t.snooze }];
+    voice.play('alert');
+    if (capri.stowed) {
+      host.setConfig({ visible: true });
+      await capri.unstow();
+    }
+    capri.wake();
+    capri.perform('hop');
+    const shownAt = performance.now();
+    const shown = panel.say({
+      kind: 'remind', face: 'look', line, quote: missed ? '' : fmt(t.asked, { time }), actions, onAction, hold: null,
+      // closed without an answer: seen, if it was up long enough to read; else back in a couple of minutes
+      onLeave: () => {
+        if (answered) return;
+        if (performance.now() - shownAt > 2500) reminders.remove(r.id);
+        else reminders.snooze(r.id, 2 * 60 * 1000);
+      },
+    });
+    if (!shown) reminders.snooze(r.id, 60 * 1000); // something more important on: in a minute
+  };
+  reminders.onDue = (r) => remind(r).catch((err) => {
+    console.error('[capri] reminder', err);
+    reminders.snooze(r.id, 60 * 1000);
+  });
 
   // Petted (your pointer back and forth over her mane): she purrs and says something now and then.
   // Too long and she's had enough: a zap at your pointer.
@@ -359,6 +410,7 @@ async function boot() {
   });
 
   host.onConfig((cfg) => {
+    if (cfg.reminders) reminders.sync(cfg.reminders); // one may have been cancelled elsewhere
     voice.configure(cfg);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;

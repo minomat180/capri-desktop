@@ -24,6 +24,7 @@ const DEFAULTS = {
   chatBackend: 'pi',   // 'pi': any model pi has, with pi's logins; 'ollama': ollamaHost below
   piModel: 'anthropic/claude-haiku-4-5', // small and quick: she chats, she doesn't code
   spotifyClientId: '314167130a8b43a18fed103b9261f311', // mino's dev app "glass-player"; secret in the keyring
+  reminders: [],       // the ones she keeps for you (reminders.js)
   chatModel: null,     // the Ollama model (null: the first one installed)
   ollamaHost: '127.0.0.1:11434', // minomat over Thunderbolt
 };

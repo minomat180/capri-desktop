@@ -18,7 +18,7 @@ export const FACES = {
   grin: 'capri-face.png',
 };
 const KIND_FACE = { alert: 'many', done: 'look', error: 'laugh', work: 'calm', idle: 'calm', report: 'smug', chat: 'look' };
-const PRIORITY = { info: 1, idle: 1, work: 2, done: 3, error: 3, report: 3, chat: 3, alert: 4 };
+const PRIORITY = { info: 1, idle: 1, work: 2, done: 3, error: 3, report: 3, chat: 3, remind: 4, alert: 4 };
 const DECODE_STEP_MS = 28;
 const TICKER_MAX = 3; // plates over her head at once, one per busy agent
 const COUNT_MS = 700; // her report's numbers counting up

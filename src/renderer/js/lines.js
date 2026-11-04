@@ -165,6 +165,20 @@ export const LINES = {
       afterInstall: 'Once you have it, right-click me › “Install Claude Code hooks”.',
       failed: 'I couldn’t plug in: {error}',
     },
+    // reminders (reminders.js): "remind me in 20 minutes to take out the laundry"
+    remind: {
+      now: ['Hey. You asked me to remind you: {text}.', 'It’s time: {text}.', 'Reminder, choom: {text}.'],
+      nowBare: ['It’s time. You asked me to give you a shout.', 'Hey, it’s now. You asked for a reminder.'],
+      missed: 'I was off when it was due ({time}), but you asked me to remind you: {text}.',
+      missedBare: 'I was off when it was due ({time}): you asked me to give you a shout.',
+      asked: 'Set for {time}.',
+      done: 'Done', snooze: '10 more min',
+      doneLine: ['Nice.', 'Good. Crossing it off.', 'Noted.'],
+      snoozed: 'Okay, back in 10 minutes.',
+      set: 'Reminder for {time}: {text}.', setBare: 'Reminder for {time}.',
+      cancel: 'Cancel', cancelled: 'Reminder cancelled.',
+      when: 'When should I remind you?',
+    },
     // petting her: the pointer going back and forth over her mane
     pet: {
       low: ['Hey… what are you doing?', 'Okay… fine. Just a little.'],

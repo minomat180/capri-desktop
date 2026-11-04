@@ -4,6 +4,7 @@
 // it with a tag in its answer), shows you a button with that app's name, and only your click closes it.
 
 import { pick, fmt } from './util.js';
+import { parseReminder, clock } from './reminders.js';
 
 const REMEMBER = 12; // messages of this conversation she keeps in mind
 const LANGUAGE = { fr: 'French', en: 'English', es: 'Spanish', pt: 'Brazilian Portuguese', ru: 'Russian' };
@@ -44,6 +45,8 @@ export class Chat {
     this.answer = '';
     this.apps = [];    // the apps open on this PC, as last listed: [{ name, label }]
     this.installed = []; // the apps she can open: [{ id, name }]
+    this.reminders = null; // the ones she keeps (reminders.js, from app.js)
+    this.waitingWhen = null; // you asked for one without saying when: { text, until }
     this.appsReady = Promise.resolve();
     host.onChatDelta(({ id, text }) => this.onDelta(id, text));
   }
@@ -133,6 +136,7 @@ export class Chat {
     this.panel.setChatBusy(true);
     this.panel.setActions([]); // a close button she offered before goes with a new message
     this.panel.chatTurn({ quote: text, face: 'aside' });
+    const reminder = this.noteReminder(text);
     this.capri.pulse();
     await Promise.race([this.appsReady, new Promise((r) => setTimeout(r, 1500))]);
     const messages = [{ role: 'system', content: this.persona() }, ...this.history.slice(-REMEMBER)];
@@ -157,6 +161,7 @@ export class Chat {
     }
     const answer = clean(res.text) || '…';
     this.history.push({ role: 'assistant', content: answer });
+    if (reminder) this.showReminder(reminder, answer);
     this.panel.stream(answer, { done: true });
     this.panel.setFace(mood(answer));
     this.panel.setChatBusy(false);
@@ -176,6 +181,41 @@ export class Chat {
     else if (toOpen) this.openApp(toOpen, answer);
     else if (wanted) this.offerClose(wanted, answer);
     this.listApps(); // fresh for the next message
+  }
+
+  // "remind me in 20 minutes to take the bread out": set straight off your message (so it works
+  // the same on the smallest model), before her answer is even asked for.
+  noteReminder(text) {
+    if (!this.reminders) return null;
+    const t = this.brain.t.remind;
+    // she asked when, and this is the answer
+    if (this.waitingWhen && Date.now() < this.waitingWhen.until) {
+      const when = parseReminder(`remind me ${text}`) || parseReminder(text);
+      const at = when?.at;
+      const said = this.waitingWhen.text;
+      this.waitingWhen = null;
+      if (at) return this.reminders.add(at, said);
+      return null;
+    }
+    const asked = parseReminder(text);
+    if (!asked) return null;
+    if (!asked.at) { // "remind me to call mum" with no time: she asks when
+      this.waitingWhen = { text: asked.text || '', until: Date.now() + 5 * 60 * 1000 };
+      return null;
+    }
+    return this.reminders.add(asked.at, asked.text || '');
+  }
+
+  // A line under her answer saying it's set, with a button to take it back.
+  showReminder(r, answer) {
+    const t = this.brain.t.remind;
+    const line = fmt(r.text ? t.set : t.setBare, { time: clock(r.at, this.brain.lang), text: r.text });
+    this.panel.stream(`${answer}\n${line}`, { done: true });
+    this.panel.setActions([{ id: 'cancel', label: t.cancel }], () => {
+      this.reminders.remove(r.id);
+      this.panel.setActions([]);
+      this.panel.stream(`${answer}\n${t.cancelled}`, { done: true });
+    });
   }
 
   listApps() {
@@ -357,6 +397,11 @@ export class Chat {
     out.push('You can find and play music on Spotify. A specific song: end your answer with [[play: SONG ARTIST]] (add the artist if you know it). A mood or genre ("something chill", "some lofi"): end with [[playlist: WORDS]]. If they only want to look for something: end with [[search: WORDS]], they get the results to pick from. Say a few words first; never claim it is already playing.');
     out.push('You can control the music player (Spotify): when the user asks to skip, go back, pause or resume, say a few words and end your answer with [[media: next]], [[media: previous]], [[media: pause]] or [[media: play]]. Never say which song comes next, you don\'t know until it plays.');
     if (this.music?.track) out.push(`Playing right now (${this.music.state || 'unknown'}): ${this.music.track}.`);
+    if (this.reminders) {
+      out.push('You keep reminders for the user. When they ask to be reminded of something at a given time, your system sets it from their message as they send it, and a line under your answer shows it. Just confirm it in a few words, in character, and never say you can\'t. If they didn\'t say when, ask them when.');
+      const soon = this.reminders.upcoming.slice(0, 6);
+      if (soon.length) out.push(`Reminders you're keeping for them: ${soon.map((r) => `${clock(r.at, this.brain.lang)}${r.text ? ` (${r.text})` : ''}`).join('; ')}.`);
+    }
     out.push(`Apart from that, ${cant}`);
     return out;
   }
