@@ -9,3 +9,6 @@ Thumbs.db
 captures/
 __pycache__/
 *.pyc
+linux/tts/venv/
+linux/tts/voices/
+linux/tts/__pycache__/
