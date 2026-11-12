@@ -37,6 +37,12 @@ First answer wins.
    the turn ended and T3 cancelled it). `capri-approval.ts` now tries the new single-tool shape
    first and falls back to the three old names, so it works on both. If stale cards ever come
    back, check the tool names first: `tools/list` on `$T3_MCP_URL`.
+   **Second cause, same symptom (2026-11-12):** T3 does not carry our dialog title through. Every
+   card reads back with `header: "Question"`, so matching on `q.header === title` never matched
+   and the card was left to go stale even once the tool name was right. We now match on the two
+   option values alone, which embed the secret's name. Checked live: both stale cards matched and
+   closed. If this breaks again, `read` a pending card and look at what `header` and `options`
+   actually contain before trusting either.
 2. **"Released" then 20–35 s of silence, then a failure.** Every Capri approval on 2026-10-26
    went through, but the command after it (`browser-login`) failed in 4 of 6 runs: exit 127
    (broken symlink) twice, then `selector never appeared` (15 s wait plus 3.5 s settle). From
