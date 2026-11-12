@@ -28,10 +28,15 @@ First answer wins.
    it, when it times out, or at the end of the turn. So after a Capri click, T3 kept showing the
    question. Clicking it there did nothing (pi had forgotten the id), but T3 showed it as
    answered. **Fix:** under T3, the Capri answer is submitted *through T3*
-   (`t3_pending_request_respond` on the own thread, via `T3_MCP_URL` + `T3_MCP_BEARER_TOKEN`
-   that T3 gives every pi it starts). T3 closes the card properly, and pi gets the value through
-   the normal path. If that fails, we abort the dialog and post a notice into the T3 thread
-   saying the card is stale.
+   (on the own thread, via `T3_MCP_URL` + `T3_MCP_BEARER_TOKEN` that T3 gives every pi it
+   starts). T3 closes the card properly, and pi gets the value through the normal path. If that
+   fails, we abort the dialog and post a notice into the T3 thread saying the card is stale.
+   **Tool rename (seen 2026-11-11):** T3 folded `t3_pending_request_{list,read,respond}` into one
+   `t3_pending_request` tool taking `action: list|read|respond`; the old names now return
+   "Tool not found". That silently broke the close-the-card path (the card then sat there until
+   the turn ended and T3 cancelled it). `capri-approval.ts` now tries the new single-tool shape
+   first and falls back to the three old names, so it works on both. If stale cards ever come
+   back, check the tool names first: `tools/list` on `$T3_MCP_URL`.
 2. **"Released" then 20–35 s of silence, then a failure.** Every Capri approval on 2026-10-26
    went through, but the command after it (`browser-login`) failed in 4 of 6 runs: exit 127
    (broken symlink) twice, then `selector never appeared` (15 s wait plus 3.5 s settle). From
