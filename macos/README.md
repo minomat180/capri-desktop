@@ -6,6 +6,7 @@ with a native overlay app in place of the GTK one. Nothing here is Electron.
 ```
 macos/shell/main.swift   the overlay app: a transparent click-through panel with her renderer in
                          a WKWebView, and the service's window to the system
+macos/shell/terminal.html  her terminal's page (xterm.js); its shell runs in main.swift
 macos/shell/build.sh     builds macos/shell/Capri.app (needs the Xcode command line tools)
 macos/bin/capri-login    start her at login, or stop doing so
 macos/daemon/            what replaces the mango, /proc and playerctl modules of linux/daemon/
@@ -14,7 +15,7 @@ macos/daemon/            what replaces the mango, /proc and playerctl modules of
 ## Run
 
 ```sh
-npm install --omit=dev --ignore-scripts   # her two fonts; Electron isn't needed
+npm install --omit=dev --ignore-scripts   # her two fonts and xterm.js; Electron isn't needed
 macos/shell/build.sh
 linux/bin/capri                           # logs: ~/.local/state/capri/capri.log
 linux/bin/capri-ctl show|hide|stow|menu|chat|quit
@@ -26,6 +27,20 @@ config (`""` for none), then restart her.
 
 Settings are in `~/.config/capri/config.json`, as on Linux. `output` is the name of the screen she
 lives on (as System Settings shows it); leave it out for the main one.
+
+## Her terminal
+
+Ask her for a terminal in her chat ("open a terminal") and she opens her own: a window in her
+colours with your login shell in it, in your home folder. It takes Apple's Terminal's place in the
+list of apps she can open; the others (iTerm, Ghostty...) she still opens by name.
+
+- She opens it and that's all. Nothing she or an agent says is ever typed into it.
+- Cmd+C copies a selection, Cmd+V pastes, Cmd+A selects all, Cmd+K clears, Cmd+W closes.
+- She can sit on it and take it over like any other window. It's also the demo's window, there
+  with a few lines of text and no shell behind it.
+- The shell is started with nothing of Capri's open but its own terminal (the pipes to the
+  service least of all).
+- xterm.js is copied into `Capri.app` when it's built: after updating it, run `build.sh` again.
 
 ## How it differs from Linux
 
@@ -40,7 +55,8 @@ lives on (as System Settings shows it); leave it out for the main one.
 | Her menu | rofi | a native menu, also under her icon in the menu bar |
 | Hide and show | a mango bind (Super+C) | a system-wide hot key (Ctrl+Option+C) |
 | Start at login | mango's autostart | a LaunchAgent (`macos/bin/capri-login`) |
-| The demo's terminal | a `foot` window | a window the overlay app draws itself |
+| The demo's terminal | a `foot` window | her own terminal window, with canned text |
+| "Open a terminal" | whichever terminal is installed | her own: xterm.js in a window of the overlay app, your shell on a pty |
 | Spotify search secret | gnome-keyring | pi-vault's keychain entry: Touch ID once per run of the service |
 | Which window an agent is in | `/proc` | one `ps`, remembered per agent |
 

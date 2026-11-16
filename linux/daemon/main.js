@@ -535,9 +535,10 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
   // macOS, where taking a screenshot needs a permission: the overlay photographs its own page
+  // (?terminal=1: her newest terminal window instead)
   if (DEV && MAC && req.method === 'POST' && p === '/debug/snapshot') {
     const file = path.join(os.tmpdir(), 'capri', 'snapshot.png');
-    return send(res, 200, { ok: Boolean(await native.request('snapshot', { path: file })), file });
+    return send(res, 200, { ok: Boolean(await native.request('snapshot', { path: file, terminal: url.searchParams.has('terminal') })), file });
   }
 
   return send(res, 404, { ok: false });

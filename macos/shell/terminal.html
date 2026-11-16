@@ -1,0 +1,82 @@
+<!doctype html>
+<!-- Her terminal: xterm.js drawing what a shell says, in her colours and her font. The shell
+     itself runs in the overlay app (main.swift, Terminal), which this page talks to:
+       to it     {type: 'ready' | 'input' | 'resize' | 'ack' | 'title' | 'copy' | 'paste' | 'close'}
+       from it   feed(base64), paste(text), prop()
+     Copied into Capri.app with xterm.js by build.sh. -->
+<meta charset="utf-8">
+<link rel="stylesheet" href="xterm.css">
+<style>
+  @font-face { font-family: 'JetBrains Mono'; src: url('jetbrains-mono-400.woff2') format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('jetbrains-mono-700.woff2') format('woff2'); font-weight: 700; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #120c1c; }
+  #term { position: absolute; inset: 2px 4px 8px 12px; }
+  .xterm .xterm-viewport { background: transparent !important; }
+</style>
+<div id="term"></div>
+<script src="xterm.js"></script>
+<script src="addon-fit.js"></script>
+<script>
+  const post = (msg) => window.webkit.messageHandlers.term.postMessage(msg);
+  window.addEventListener('error', (e) => post({ type: 'error', text: `${e.message} ${e.lineno}` }));
+
+  const term = new Terminal({
+    fontFamily: "'JetBrains Mono', Menlo, monospace",
+    fontSize: 13,
+    lineHeight: 1.15,
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    cursorWidth: 2,
+    scrollback: 5000,
+    macOptionClickForcesSelection: true,
+    theme: { // her palette (src/renderer/styles/capri.css), as hex
+      background: '#120c1c', foreground: '#fcf2f6', cursor: '#36ff73', cursorAccent: '#120c1c',
+      selectionBackground: '#7d3af599',
+      black: '#20182f', red: '#ff245d', green: '#36ff73', yellow: '#f9d544',
+      blue: '#75abff', magenta: '#a98bff', cyan: '#58e5ed', white: '#d6c5d0',
+      brightBlack: '#9c8ca0', brightRed: '#ff6f84', brightGreen: '#36ff73', brightYellow: '#f9d544',
+      brightBlue: '#75abff', brightMagenta: '#a98bff', brightCyan: '#58e5ed', brightWhite: '#fcf2f6',
+    },
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+
+  // what the shell says, one piece at a time: the next one is only read once this one is drawn
+  window.feed = (b64) => {
+    const raw = atob(b64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    term.write(bytes, () => post({ type: 'ack' }));
+  };
+  window.paste = (text) => term.paste(text);
+  // the demo's stand-in: something to look at, nobody behind it
+  window.prop = () => { term.options.disableStdin = true; term.options.cursorBlink = false; };
+
+  // Cmd+C / V / A / K / W: there's no Edit menu to do them (she has no menu bar of her own)
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== 'keydown' || !e.metaKey || e.ctrlKey || e.altKey) return true;
+    const key = e.key.toLowerCase();
+    if (key === 'c' && term.hasSelection()) post({ type: 'copy', text: term.getSelection() });
+    else if (key === 'v') post({ type: 'paste' });
+    else if (key === 'a') term.selectAll();
+    else if (key === 'k') term.clear();
+    else if (key === 'w') post({ type: 'close' });
+    else return true;
+    e.preventDefault();
+    return false;
+  });
+
+  const el = document.getElementById('term');
+  document.fonts.load("13px 'JetBrains Mono'").catch(() => {}).then(() => {
+    term.open(el);
+    fit.fit();
+    term.onData((data) => post({ type: 'input', data }));
+    term.onBinary((data) => post({ type: 'input', data, binary: true }));
+    term.onResize(({ cols, rows }) => post({ type: 'resize', cols, rows }));
+    term.onTitleChange((title) => post({ type: 'title', title }));
+    new ResizeObserver(() => fit.fit()).observe(el);
+    window.addEventListener('focus', () => term.focus());
+    term.focus();
+    post({ type: 'ready', cols: term.cols, rows: term.rows });
+  });
+</script>

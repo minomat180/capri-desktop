@@ -12,7 +12,7 @@
 //
 // For the service, JSON lines:
 //   stdin  requests   {id, type, ...}            apps, closeApp, menu, media, mediaStatus, playUri,
-//                                                cursor, tray, demoWindow, snapshot, quit
+//                                                cursor, tray, terminal, demoWindow, snapshot, quit
 //   fd 4   replies    {type: 'reply', id, value}
 //   fd 4   pushes     {type: 'windows' | 'pc' | 'menu' | 'hotkey', ...}, sent when something changes
 //   fd 3   approvals  {type: 'approval', id, decision}: only a real click gets here
@@ -268,6 +268,212 @@ enum HotKey {
   }
 }
 
+// ---------- her terminal ----------
+// A window of our own with a login shell in it: xterm.js (terminal.html) draws, and the shell
+// runs here on a pseudo-terminal. She opens it when you ask her for a terminal, and it's what she
+// sits on in the demo (there with a few lines of text and no shell: `prop`).
+//
+// The shell gets nothing of ours but its own terminal: every other file is closed to it, the
+// pipes to the service first of all (fd 3 is where approvals are answered).
+
+final class Terminal: NSObject, WKScriptMessageHandler, NSWindowDelegate {
+  static let page = Bundle.main.resourceURL?.appendingPathComponent("terminal/index.html")
+  static let ink = NSColor(srgbRed: 0x12 / 255.0, green: 0x0C / 255.0, blue: 0x1C / 255.0, alpha: 1)
+
+  let window: NSWindow
+  let prop: String?
+  var view: WKWebView!
+  var onClose: ((Terminal) -> Void)?
+  var master: Int32 = -1
+  var child: pid_t = 0
+  var reader: DispatchSourceRead?
+  var held = false // the reader waits while the page draws what it was last given
+  let writer = DispatchQueue(label: "ch.mino.capri.terminal")
+
+  init(title: String, frame: NSRect, prop: String? = nil) {
+    self.prop = prop
+    window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+    super.init()
+    window.title = title
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: .darkAqua)
+    window.titlebarAppearsTransparent = true
+    window.backgroundColor = Terminal.ink
+    window.minSize = NSSize(width: 320, height: 160)
+    window.delegate = self
+    let config = WKWebViewConfiguration()
+    config.userContentController.add(self, name: "term")
+    view = WKWebView(frame: window.contentLayoutRect, configuration: config)
+    view.setValue(false, forKey: "drawsBackground")
+    view.autoresizingMask = [.width, .height]
+    window.contentView = view
+    if let page = Terminal.page, FileManager.default.fileExists(atPath: page.path) {
+      view.loadFileURL(page, allowingReadAccessTo: page.deletingLastPathComponent())
+    } else {
+      log("terminal: its page isn't in the app (run macos/shell/build.sh)")
+    }
+  }
+
+  func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
+    guard let msg = message.body as? [String: Any], let kind = msg["type"] as? String else { return }
+    switch kind {
+    case "ready":
+      if let prop {
+        view.evaluateJavaScript("prop()", completionHandler: nil)
+        feed(Data(prop.utf8))
+      } else if child == 0 {
+        start(cols: msg["cols"] as? Int ?? 80, rows: msg["rows"] as? Int ?? 24)
+      }
+    case "ack":
+      if held { held = false; reader?.resume() }
+    case "input":
+      guard master >= 0, let text = msg["data"] as? String else { return }
+      // binary (mouse reports): one byte per character
+      let data = msg["binary"] as? Bool == true ? Data(text.unicodeScalars.map { UInt8(truncatingIfNeeded: $0.value) }) : Data(text.utf8)
+      let fd = master
+      writer.async {
+        data.withUnsafeBytes { raw in
+          var off = 0
+          while off < raw.count {
+            let n = write(fd, raw.baseAddress! + off, raw.count - off)
+            if n > 0 { off += n } else if errno != EINTR { break }
+          }
+        }
+      }
+    case "resize":
+      guard master >= 0 else { return }
+      var size = winsize(ws_row: UInt16(clamping: msg["rows"] as? Int ?? 24), ws_col: UInt16(clamping: msg["cols"] as? Int ?? 80), ws_xpixel: 0, ws_ypixel: 0)
+      _ = ioctl(master, TIOCSWINSZ, &size)
+    case "title":
+      if prop == nil, let title = msg["title"] as? String, !title.isEmpty { window.title = String(title.prefix(120)) }
+    case "copy":
+      guard let text = msg["text"] as? String else { return }
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(text, forType: .string)
+    case "paste":
+      guard let text = NSPasteboard.general.string(forType: .string),
+            let json = try? JSONSerialization.data(withJSONObject: [text]), let list = String(data: json, encoding: .utf8) else { return }
+      view.evaluateJavaScript("paste(\(list)[0])", completionHandler: nil)
+    case "close":
+      window.performClose(nil)
+    case "error":
+      log("[terminal]", msg["text"] as? String ?? "")
+    default:
+      break
+    }
+  }
+
+  func feed(_ data: Data) {
+    view.evaluateJavaScript("feed('\(data.base64EncodedString())')", completionHandler: nil)
+  }
+
+  // Your login shell, on a terminal of its own, in your home folder.
+  func start(cols: Int, rows: Int) {
+    let user = getpwuid(getuid())
+    let home = user.flatMap { String(validatingUTF8: $0.pointee.pw_dir) } ?? NSHomeDirectory()
+    let shell = user.flatMap { String(validatingUTF8: $0.pointee.pw_shell) } ?? "/bin/zsh"
+    var env = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("CAPRI_") }
+    env["TERM"] = "xterm-256color"
+    env["COLORTERM"] = "truecolor"
+    env["TERM_PROGRAM"] = "Capri"
+    env["HOME"] = home
+    env["SHELL"] = shell
+    if env["LANG"] == nil, env["LC_ALL"] == nil {
+      let mine = "\(Locale.current.identifier).UTF-8"
+      env["LANG"] = FileManager.default.fileExists(atPath: "/usr/share/locale/\(mine)") ? mine : "en_US.UTF-8"
+    }
+
+    // Everything the shell is started with is made ready first: between the fork and the exec
+    // there's only room for a few plain system calls.
+    // "-zsh": a login shell, so it reads your profile (and finds your PATH)
+    var argv: [UnsafeMutablePointer<CChar>?] = [strdup("-" + (shell as NSString).lastPathComponent), nil]
+    var envp: [UnsafeMutablePointer<CChar>?] = env.map { strdup("\($0.key)=\($0.value)") } + [nil]
+    let path = strdup(shell), dir = strdup(home)
+    defer { for p in argv + envp + [path, dir] { free(p) } }
+    let highest = (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd"))?.compactMap { Int32($0) }.max() ?? 255
+    let last = highest + 64
+    var size = winsize(ws_row: UInt16(clamping: rows), ws_col: UInt16(clamping: cols), ws_xpixel: 0, ws_ypixel: 0)
+
+    // forkpty: a new session, with the new terminal as its own (job control, Ctrl+C, and the
+    // hang-up when its window closes all hang on that)
+    let pid = argv.withUnsafeMutableBufferPointer { argv in
+      envp.withUnsafeMutableBufferPointer { envp -> pid_t in
+        let pid = forkpty(&master, nil, nil, &size)
+        if pid == 0 {
+          // the shell-to-be: nothing of ours left open, the signals we ignore back to normal
+          var fd: Int32 = 3
+          while fd <= last { close(fd); fd += 1 }
+          signal(SIGPIPE, SIG_DFL)
+          signal(SIGTERM, SIG_DFL)
+          chdir(dir)
+          execve(path, argv.baseAddress, envp.baseAddress)
+          _exit(127)
+        }
+        return pid
+      }
+    }
+    guard pid > 0 else {
+      master = -1
+      return failed("\(shell) didn't start (\(String(cString: strerror(errno))))")
+    }
+    child = pid
+    _ = fcntl(master, F_SETFD, FD_CLOEXEC)
+    var modes = termios()
+    if tcgetattr(master, &modes) == 0 {
+      modes.c_iflag |= tcflag_t(IUTF8) // backspace takes a whole character
+      tcsetattr(master, TCSANOW, &modes)
+    }
+
+    let fd = master
+    let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
+    source.setEventHandler { [weak self] in
+      guard let self, !self.held else { return }
+      var buffer = [UInt8](repeating: 0, count: 32768)
+      let n = read(fd, &buffer, buffer.count)
+      if n > 0 {
+        self.held = true
+        source.suspend()
+        self.feed(Data(buffer[0..<n]))
+      } else if n == 0 || (errno != EINTR && errno != EAGAIN) {
+        self.master = -1 // nobody on the other end any more
+        source.cancel()
+      }
+    }
+    source.setCancelHandler { close(fd) }
+    source.resume()
+    reader = source
+
+    // the shell is done (exit, Ctrl+D): so is the window
+    let gone = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+    gone.setEventHandler { [weak self] in
+      var how: Int32 = 0
+      waitpid(pid, &how, 0)
+      gone.cancel()
+      self?.child = 0
+      self?.window.close()
+    }
+    gone.resume()
+  }
+
+  func failed(_ why: String) {
+    log("terminal:", why)
+    feed(Data("\u{1B}[31m\(why)\u{1B}[0m\r\n".utf8))
+  }
+
+  func windowWillClose(_: Notification) {
+    view.configuration.userContentController.removeScriptMessageHandler(forName: "term")
+    if child > 0 { kill(child, SIGHUP) } // what a closed terminal says to its shell
+    if let reader {
+      if held { held = false; reader.resume() }
+      reader.cancel() // closes our end
+      self.reader = nil
+    }
+    master = -1
+    onClose?(self)
+    onClose = nil
+  }
+}
+
 // ---------- the overlay ----------
 
 final class OverlayPanel: NSPanel {
@@ -287,7 +493,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   let output: String?
   let icon: String?
   let hotkey: String?
-  var demo: NSWindow?
+  var demo: Terminal?
+  var terminals: [Terminal] = []
   var face: NSImage?
   var panel: OverlayPanel!
   var view: OverlayView!
@@ -510,15 +717,16 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
     let usable = screen.visibleFrame.height // without the menu bar and the Dock
     let me = ProcessInfo.processInfo.processIdentifier
     let front = NSWorkspace.shared.frontmostApplication
+    let ours = Set((terminals + [demo].compactMap { $0 }).map { $0.window.windowNumber })
     let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
     var wins: [[String: Any]] = []
     var fg = 0
     var fullscreen = false
     for w in list {
-      // everyone's windows but our own, except the demo's stand-in terminal
+      // everyone's windows but our own, except her terminals
       guard w[kCGWindowLayer as String] as? Int == 0,
             let pid = w[kCGWindowOwnerPID as String] as? Int32,
-            let id = w[kCGWindowNumber as String] as? Int, pid != me || id == demo?.windowNumber,
+            let id = w[kCGWindowNumber as String] as? Int, pid != me || ours.contains(id),
             (w[kCGWindowAlpha as String] as? Double ?? 1) > 0.01,
             let box = w[kCGWindowBounds as String] as? NSDictionary,
             let r = CGRect(dictionaryRepresentation: box),
@@ -611,37 +819,50 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
     return menuPick
   }
 
-  // ---------- the demo's stand-in terminal ----------
-  // A window of our own that looks like a terminal after a test run, for her to sit on and take
-  // over. It's the one window of ours that counts as a window (pollWindows).
+  // ---------- her terminals ----------
+  // The only windows of ours that count as windows (pollWindows): she can sit on them.
 
+  func windowsSoon() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.pollWindows() }
+  }
+
+  // One with your shell in it, in front, with the keyboard.
+  func openTerminal() -> Bool {
+    let f = screen.visibleFrame
+    let size = NSSize(width: min(760, f.width - 80), height: min(460, f.height - 80))
+    let step = CGFloat(terminals.count % 6) * 26 // each new one a step down and right of the last
+    let origin = NSPoint(x: f.minX + (f.width - size.width) * 0.5 + step, y: f.minY + (f.height - size.height) * 0.55 - step)
+    let terminal = Terminal(title: "capri", frame: NSRect(origin: origin, size: size))
+    terminal.onClose = { [weak self] closed in
+      self?.terminals.removeAll { $0 === closed }
+      self?.windowsSoon()
+    }
+    terminals.append(terminal)
+    NSApp.activate(ignoringOtherApps: true)
+    terminal.window.makeKeyAndOrderFront(nil)
+    terminal.window.makeFirstResponder(terminal.view)
+    windowsSoon()
+    return true
+  }
+
+  // The demo's stand-in: the same window after a test run, nobody behind it, for her to sit on
+  // and take over.
   func demoWindow(_ open: Bool) -> Bool {
-    demo?.close()
+    demo?.window.close()
     demo = nil
-    defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.pollWindows() } }
+    windowsSoon()
     guard open else { return false }
     let f = screen.visibleFrame
     let size = NSSize(width: 560, height: 250)
     let origin = NSPoint(x: f.minX + (f.width - size.width) * 0.42, y: f.minY + (f.height - size.height) * 0.4)
-    let win = NSWindow(contentRect: NSRect(origin: origin, size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-    win.title = "night-city-api"
-    win.isReleasedWhenClosed = false
-    win.appearance = NSAppearance(named: .darkAqua)
-    win.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1)
-    let green = NSColor(red: 0.35, green: 0.85, blue: 0.45, alpha: 1)
-    let text = NSMutableAttributedString()
-    for (line, color) in [
-      ("~/night-city-api$ npm test -- gigs\n", green), ("  GET /gigs\n", NSColor.white),
-      ("    ok returns 20 items per page\n    ok paginates with a cursor\n    ok rejects a bad cursor\n", green),
-      ("  6 passing (212ms)\n", NSColor.white), ("~/night-city-api$ ", green),
-    ] {
-      text.append(NSAttributedString(string: line, attributes: [.foregroundColor: color, .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)]))
-    }
-    let label = NSTextField(labelWithAttributedString: text)
-    label.frame = NSRect(x: 14, y: 0, width: size.width - 28, height: size.height - 12)
-    win.contentView?.addSubview(label)
-    win.orderFrontRegardless() // on top, without taking the keyboard from what you're in
-    demo = win
+    let green = "\u{1B}[32m", plain = "\u{1B}[0m"
+    let text = "\(green)~/night-city-api$ npm test -- gigs\(plain)\r\n  GET /gigs\r\n"
+      + "\(green)    ok returns 20 items per page\r\n    ok paginates with a cursor\r\n    ok rejects a bad cursor\(plain)\r\n"
+      + "  6 passing (212ms)\r\n\(green)~/night-city-api$\(plain) "
+    let terminal = Terminal(title: "night-city-api", frame: NSRect(origin: origin, size: size), prop: text)
+    terminal.onClose = { [weak self] closed in if self?.demo === closed { self?.demo = nil } }
+    terminal.window.orderFrontRegardless() // on top, without taking the keyboard from what you're in
+    demo = terminal
     return true
   }
 
@@ -708,6 +929,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
       Player.control(msg["action"] as? String ?? "") { answer($0) }
     case "status":
       status(stowed: msg["stowed"] as? Bool ?? false, waiting: msg["waiting"] as? Bool ?? false)
+    case "terminal":
+      answer(openTerminal())
     case "demoWindow":
       answer(demoWindow(msg["open"] as? Bool ?? false))
     case "playUri":
@@ -716,7 +939,9 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
       Player.status { answer($0) }
     case "snapshot":
       // what the page looks like right now, as a PNG file (debugging: `capri --dev`)
-      view.takeSnapshot(with: nil) { image, _ in
+      let shown: WKWebView? = msg["terminal"] as? Bool == true ? (terminals.last ?? demo)?.view : view
+      guard let shown else { return answer(false) }
+      shown.takeSnapshot(with: nil) { image, _ in
         guard let path = msg["path"] as? String, let tiff = image?.tiffRepresentation,
               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return answer(false) }
         answer((try? png.write(to: URL(fileURLWithPath: path))) != nil)
@@ -751,6 +976,8 @@ if getenv("CAPRI_OWN_PROCESS") == nil {
 }
 
 signal(SIGPIPE, SIG_IGN)
+// the pipes to the service are ours alone: nothing we start gets them
+for fd: Int32 in [3, 4] { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }
 var args = Array(CommandLine.arguments.dropFirst())
 func option(_ name: String) -> String? {
   guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
