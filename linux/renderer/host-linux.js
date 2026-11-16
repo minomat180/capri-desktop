@@ -59,6 +59,9 @@
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: c.x, clientY: c.y, bubbles: true }));
   });
 
+  // macOS: the overlay app hears the pointer from the system and says so here, skipping the service
+  window.__capriCursor = (c) => fire('cursor', c);
+
   // ---------- copy image: the overlay snapshots itself ----------
   const pending = new Map();
   let seq = 0;

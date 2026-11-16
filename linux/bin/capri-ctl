@@ -3,7 +3,7 @@
 #   capri-ctl stow|show|hide|menu|status|teleport|satellite|demo|report|chat|quit
 #   capri-ctl watch     stream her state as JSON lines (for the waybar module)
 #   capri-ctl running   exit 0 if she's up
-dir=${XDG_RUNTIME_DIR:-/tmp}/capri
+dir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/capri   # macOS has no XDG_RUNTIME_DIR: its per-user TMPDIR
 port=$(cat "$dir/port" 2>/dev/null || echo 47823)
 token=$(cat "$dir/token" 2>/dev/null)
 cmd=${1:-status}

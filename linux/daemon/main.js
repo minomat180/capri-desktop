@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-// Capri on Linux/mango: the service. Takes the agent events (Claude Code hooks, the pi
+// Capri on Linux/mango, and on macOS: the service. Takes the agent events (Claude Code hooks, the pi
 // extension) on 127.0.0.1:47823/event like upstream's Electron app did, serves her renderer,
 // gives it the `window.host` API over HTTP + server-sent events, watches mango (windows, focus,
 // pointer), and runs the overlay (linux/shell/capri-shell.py) as a child process.
+//
+// On a Mac the same service runs with macos/daemon/ in place of the mango, /proc and playerctl
+// modules, and macos/shell/Capri.app as the overlay (which is also its window to the system).
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -13,14 +16,18 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFile } = require('node:child_process');
 
+const MAC = process.platform === 'darwin';
+const platform = (name) => require(MAC ? `../../macos/daemon/${name}` : `./${name}`);
+
 const config = require('./config');
-const mango = require('./mango');
-const agents = require('./agents');
-const apps = require('./apps');
-const pc = require('./pc');
-const launch = require('./launch');
-const media = require('./media');
-const music = require('./music');
+const { Desktop } = platform(MAC ? 'desktop' : 'mango');
+const native = MAC ? platform('native') : null; // the line to the overlay app, macOS only
+const agents = platform('agents');
+const apps = platform('apps');
+const pc = platform('pc');
+const launch = platform('launch');
+const media = platform('media');
+const music = platform('music');
 const piChat = require('./pi-chat');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
@@ -101,7 +108,7 @@ const sendCommand = (name, payload = {}) => emit('capri:command', { name, ...pay
 
 // ---------- state ----------
 
-const desktop = new mango.Desktop({ ignoreAppIds: ['capri'] });
+const desktop = new Desktop({ ignoreAppIds: ['capri'] });
 let lastWindows = null;
 let chatModels = null;
 const chats = new Map();
@@ -186,7 +193,7 @@ async function refreshModels() {
   return chatModels;
 }
 
-const openPath = (p) => spawn('xdg-open', [p], { detached: true, stdio: 'ignore' }).unref();
+const openPath = (p) => spawn(MAC ? '/usr/bin/open' : 'xdg-open', [p], { detached: true, stdio: 'ignore' }).unref();
 
 const appInfo = (app) => app && { name: app.process, label: app.name };
 
@@ -206,10 +213,12 @@ const HOST = {
   },
   windowsNow: () => lastWindows,
   cursor: async () => (await desktop.cursor().catch(() => null)) || { x: 0, y: 0, inside: false },
-  // no Windows tray: point at the right end of waybar, where her module lives
-  trayPlace: () => {
+  // no Windows tray: point at the right end of waybar, where her module lives. On a Mac she has
+  // a real icon in the menu bar (unless the bar is too full to show it).
+  trayPlace: async () => {
     const m = desktop.monitor;
     const w = m?.width || 1920;
+    if (MAC) return { icon: await native.request('tray'), corner: { x: w - 260, y: 0, w: 250, h: m?.menuBar || 30 } };
     return { icon: null, corner: { x: w - 260, y: 0, w: 250, h: 30 } };
   },
   demoWindow: (open) => demoWindow(Boolean(open)),
@@ -278,7 +287,7 @@ function runHooks(action, { quiet = false } = {}) {
 let demoTerm = null;
 function demoWindow(open) {
   if (demoTerm) { try { demoTerm.kill(); } catch { /* gone */ } demoTerm = null; }
-  if (!open) return false;
+  if (!open || MAC) return false; // no demo terminal on macOS yet: she plays the demo without one
   const script = 'printf "\\033[32m~/night-city-api$ npm test -- gigs\\033[0m\\n  GET /gigs\\n'
     + '\\033[32m    ok returns 20 items per page\\n    ok paginates with a cursor\\n    ok rejects a bad cursor\\033[0m\\n'
     + '  6 passing (212ms)\\n\\033[32m~/night-city-api$\\033[0m "; sleep 600';
@@ -287,14 +296,16 @@ function demoWindow(open) {
   return true;
 }
 
-// ---------- her menu (right-click her, or `capri-ctl menu`): rofi ----------
+// ---------- her menu (right-click her, or `capri-ctl menu`): rofi; a native menu on macOS ----------
 
 let menuOpen = false;
-function openMenu() {
+async function openMenu() {
   if (menuOpen) return;
   const cfg = config.load();
   const hookState = hooks.status();
-  const check = (on, label) => `${on ? '[x]' : '[ ]'} ${label}`;
+  // rofi shows text only, so ticks are drawn; a Mac menu has real ones
+  const check = (on, label) => (MAC ? { label, on } : `${on ? '[x]' : '[ ]'} ${label}`);
+  const radio = (on, label) => (MAC ? { label: `${t.size}: ${label}`, on } : `${t.size}: ${on ? '(*)' : '( )'} ${label}`);
   const items = [
     [t.teleport, () => sendCommand('teleport')],
     [t.satellite, () => sendCommand('satellite')],
@@ -304,7 +315,7 @@ function openMenu() {
     [t.talk, () => sendCommand('chat')],
     [cfg.visible ? `${t.hide}  (Super+C)` : `${t.show}  (Super+C)`, () => toggleVisible()],
     ...[[t.small, 0.45], [t.medium, 0.6], [t.large, 0.8]].map(([label, scale]) => [
-      `${t.size}: ${Math.abs(cfg.scale - scale) < 0.01 ? '(*)' : '( )'} ${label}`, () => updateConfig({ scale })]),
+      radio(Math.abs(cfg.scale - scale) < 0.01, label), () => updateConfig({ scale })]),
     [check(cfg.muted, t.mute), () => updateConfig({ muted: !cfg.muted })],
     [check(cfg.wander, t.wander), () => updateConfig({ wander: !cfg.wander })],
     [check(cfg.possess, t.possess), () => updateConfig({ possess: !cfg.possess })],
@@ -313,6 +324,14 @@ function openMenu() {
     [t.quit, () => shutdown()],
   ];
   menuOpen = true;
+  if (MAC) {
+    const shown = items.map(([label]) => (typeof label === 'string' ? { label: label.replace('  (Super+C)', '') } : label));
+    // open as long as you leave it open
+    const i = await native.request('menu', { items: shown }, 10 * 60 * 1000);
+    menuOpen = false;
+    if (Number.isInteger(i) && items[i]) items[i][1]();
+    return;
+  }
   const child = execFile('rofi', ['-dmenu', '-i', '-p', 'Capri', '-format', 'i', '-no-custom'], { timeout: 120000 }, (err, out) => {
     menuOpen = false;
     const i = Number(String(out).trim());
@@ -499,6 +518,11 @@ const server = http.createServer(async (req, res) => {
     sendCommand(body.name, body);
     return send(res, 200, { ok: true });
   }
+  // macOS, where taking a screenshot needs a permission: the overlay photographs its own page
+  if (DEV && MAC && req.method === 'POST' && p === '/debug/snapshot') {
+    const file = path.join(os.tmpdir(), 'capri', 'snapshot.png');
+    return send(res, 200, { ok: Boolean(await native.request('snapshot', { path: file })), file });
+  }
 
   return send(res, 404, { ok: false });
 });
@@ -508,6 +532,7 @@ const server = http.createServer(async (req, res) => {
 let lastCursor = '';
 let cursorTimer = null;
 function pollCursor() {
+  if (MAC) return undefined; // the overlay app hears each move from the system and tells the page itself
   const hasRenderer = [...streams].some((s) => s.kind === 'renderer');
   const next = () => { cursorTimer = setTimeout(pollCursor, 40); };
   if (!hasRenderer) return next();
@@ -528,6 +553,18 @@ let shellRestarts = 0;
 let stopping = false;
 function startShell() {
   if (NO_SHELL || stopping) return;
+  const url = `http://127.0.0.1:${PORT}/app/src/renderer/index.html`;
+  if (MAC) {
+    const bin = path.join(ROOT, 'macos', 'shell', 'Capri.app', 'Contents', 'MacOS', 'capri-shell');
+    if (!fs.existsSync(bin)) { log('the overlay is not built yet: run macos/shell/build.sh'); return; }
+    const args = ['--url', url, '--icon', path.join(ROOT, 'assets', 'icons', 'capri.png')];
+    if (desktop.output) args.push('--output', desktop.output);
+    // stdin: our requests; fd 3: approval clicks; fd 4: its replies and what it notices
+    shell = spawn(bin, args, { stdio: ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'] });
+    native.attach(shell);
+    watchShell();
+    return;
+  }
   const here = path.join(ROOT, 'linux', 'shell');
   const env = {
     ...process.env,
@@ -535,10 +572,13 @@ function startShell() {
     LD_PRELOAD: ['/usr/lib/libgtk4-layer-shell.so.0', process.env.LD_PRELOAD].filter(Boolean).join(':'),
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const url = `http://127.0.0.1:${PORT}/app/src/renderer/index.html`;
   const args = [path.join(here, 'capri-shell.py'), '--url', url];
   if (desktop.output) args.push('--output', desktop.output);
   shell = spawn('python3', args, { env, stdio: ['ignore', 'inherit', 'inherit', 'pipe'] });
+  watchShell();
+}
+
+function watchShell() {
   // fd 3: what only a real click in the overlay can send (vault approvals)
   let pending = '';
   shell.stdio[3].on('data', (chunk) => {
@@ -588,13 +628,14 @@ async function main() {
     emit('windows:update', snap);
   });
   desktop.on('error', (err) => log('mango ipc:', err.message));
+  native?.on('menu', () => openMenu()); // a click on her menu bar icon
   await desktop.start();
   server.on('error', (err) => {
     log(err.code === 'EADDRINUSE' ? `port ${PORT} in use: is Capri already running?` : `server: ${err.message}`);
     process.exit(1);
   });
   server.listen(PORT, '127.0.0.1', () => {
-    log(`listening on 127.0.0.1:${PORT}, on output ${desktop.output}`);
+    log(`listening on 127.0.0.1:${PORT}, on output ${desktop.output || 'main'}`);
     startShell();
     pollCursor();
     refreshModels();
