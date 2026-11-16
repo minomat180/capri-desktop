@@ -288,6 +288,7 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   let icon: String?
   let hotkey: String?
   var demo: NSWindow?
+  var face: NSImage?
   var panel: OverlayPanel!
   var view: OverlayView!
   var statusItem: NSStatusItem?
@@ -558,17 +559,31 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
     if let icon, let image = NSImage(contentsOfFile: icon) {
       image.size = NSSize(width: 18, height: 18)
       item.button?.image = image
+      face = image
     } else {
       item.button?.title = "C"
     }
     item.button?.toolTip = "Capri"
     item.button?.target = self
     item.button?.action = #selector(statusClicked)
+    item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
     statusItem = item
   }
 
   // the service owns the menu (what's in it depends on her settings): ask it to open one
-  @objc func statusClicked() { service.send(["type": "menu"]) }
+  @objc func statusClicked() { service.send(["type": "menu", "right": NSApp.currentEvent?.type == .rightMouseUp]) }
+
+  // Put away, her icon is all there is of her: dimmed, with a dot while an agent waits on you
+  func status(stowed: Bool, waiting: Bool) {
+    guard let button = statusItem?.button, let face else { return }
+    button.appearsDisabled = stowed && !waiting
+    button.image = !(stowed && waiting) ? face : NSImage(size: face.size, flipped: false) { rect in
+      face.draw(in: rect)
+      NSColor.systemRed.setFill()
+      NSBezierPath(ovalIn: NSRect(x: rect.maxX - 7, y: rect.maxY - 7, width: 7, height: 7)).fill()
+      return true
+    }
+  }
 
   var menuPick = -1
   @objc func menuPicked(_ sender: NSMenuItem) { menuPick = sender.tag }
@@ -691,6 +706,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
       }
     case "media":
       Player.control(msg["action"] as? String ?? "") { answer($0) }
+    case "status":
+      status(stowed: msg["stowed"] as? Bool ?? false, waiting: msg["waiting"] as? Bool ?? false)
     case "demoWindow":
       answer(demoWindow(msg["open"] as? Bool ?? false))
     case "playUri":

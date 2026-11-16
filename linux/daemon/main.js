@@ -135,6 +135,18 @@ function toggleVisible(force) {
 function publishStatus(patch) {
   Object.assign(status, patch);
   emit('status', status, 'status');
+  showStatus();
+}
+
+// macOS: her menu bar icon dims while she's put away, and gets a dot while an agent waits on you
+let shownStatus = '';
+function showStatus(again = false) {
+  if (!MAC) return;
+  const state = { stowed: !config.load().visible, waiting: status.waiting };
+  const key = JSON.stringify(state);
+  if (key === shownStatus && !again) return;
+  shownStatus = key;
+  native.tell('status', state);
 }
 
 // ---------- agent events in ----------
@@ -218,7 +230,8 @@ const HOST = {
   trayPlace: async () => {
     const m = desktop.monitor;
     const w = m?.width || 1920;
-    if (MAC) return { icon: await native.request('tray'), corner: { x: w - 260, y: 0, w: 250, h: m?.menuBar || 30 } };
+    // chip: that icon is also where she goes when put away (chip.js), not a mask in the corner
+    if (MAC) return { icon: await native.request('tray'), chip: true, corner: { x: w - 260, y: 0, w: 250, h: m?.menuBar || 30 } };
     return { icon: null, corner: { x: w - 260, y: 0, w: 250, h: 30 } };
   },
   demoWindow: (open) => demoWindow(Boolean(open)),
@@ -569,6 +582,7 @@ function startShell() {
     // stdin: our requests; fd 3: approval clicks; fd 4: its replies and what it notices
     shell = spawn(bin, args, { stdio: ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'] });
     native.attach(shell);
+    showStatus(true);
     watchShell();
     return;
   }
@@ -635,7 +649,8 @@ async function main() {
     emit('windows:update', snap);
   });
   desktop.on('error', (err) => log('mango ipc:', err.message));
-  native?.on('menu', () => openMenu()); // a click on her menu bar icon
+  // a click on her menu bar icon: her menu, or straight back out if she's put away (right-click: the menu)
+  native?.on('menu', (m) => (!config.load().visible && !m.right ? toggleVisible(true) : openMenu()));
   native?.on('hotkey', () => toggleVisible());
   await desktop.start();
   server.on('error', (err) => {

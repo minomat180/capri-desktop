@@ -56,6 +56,11 @@ class Native extends EventEmitter {
     this.emit(msg.type, msg);
   }
 
+  // something to know, no answer expected
+  tell(type, args = {}) {
+    this.child?.stdin.write(`${JSON.stringify({ ...args, type })}\n`);
+  }
+
   // resolves with the answer, or null if the overlay isn't there or takes too long
   request(type, args = {}, timeout = 5000) {
     return new Promise((resolve) => {

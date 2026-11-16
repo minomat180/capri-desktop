@@ -149,8 +149,23 @@ export class Chip extends Mask {
     this.mode = 'idle'; // hers: idle | work | alert | sleep
   }
 
+  // Where there's a real icon for her (macOS: the menu bar), that icon is her chip: she folds
+  // into it and nothing is drawn here. rect: where the icon is, or null to go back to the corner.
+  foldInto(rect) {
+    this.icon = rect || null;
+    if (this.icon) this.hide();
+  }
+
+  show() {
+    if (!this.icon) super.show();
+  }
+
   // Bottom-left corner of a w x h screen.
   place(w, h) {
+    if (this.icon) {
+      this.face = { x: this.icon.x + this.icon.w / 2, y: this.icon.y + this.icon.h / 2 };
+      return;
+    }
     super.place(MARGIN.left + 50 * K, h - MARGIN.bottom - 54 * K, K);
     this.face = { x: MARGIN.left + 50 * K, y: h - MARGIN.bottom - 54 * K };
   }
