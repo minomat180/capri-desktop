@@ -11,12 +11,14 @@
 //   {type: 'approval', ...}    -> a vault approval click, to the service over fd 3 only
 //
 // For the service, JSON lines:
-//   stdin  requests   {id, type, ...}            apps, closeApp, menu, media, mediaStatus, cursor, tray
+//   stdin  requests   {id, type, ...}            apps, closeApp, menu, media, mediaStatus, playUri,
+//                                                cursor, tray, demoWindow, snapshot, quit
 //   fd 4   replies    {type: 'reply', id, value}
-//   fd 4   pushes     {type: 'windows' | 'pc' | 'menu', ...}, sent when something changes
+//   fd 4   pushes     {type: 'windows' | 'pc' | 'menu' | 'hotkey', ...}, sent when something changes
 //   fd 3   approvals  {type: 'approval', id, decision}: only a real click gets here
 
 import AppKit
+import Carbon.HIToolbox
 import IOKit
 import IOKit.ps
 import Network
@@ -231,6 +233,41 @@ enum Player {
   }
 }
 
+// ---------- the shortcut that puts her away and brings her back ----------
+// A system-wide hot key (Carbon: the one way to have one without the Accessibility permission).
+// Written like "ctrl+alt+c"; the service is told each time it's pressed.
+
+enum HotKey {
+  static let keys: [Character: Int] = [
+    "a": kVK_ANSI_A, "b": kVK_ANSI_B, "c": kVK_ANSI_C, "d": kVK_ANSI_D, "e": kVK_ANSI_E, "f": kVK_ANSI_F, "g": kVK_ANSI_G,
+    "h": kVK_ANSI_H, "i": kVK_ANSI_I, "j": kVK_ANSI_J, "k": kVK_ANSI_K, "l": kVK_ANSI_L, "m": kVK_ANSI_M, "n": kVK_ANSI_N,
+    "o": kVK_ANSI_O, "p": kVK_ANSI_P, "q": kVK_ANSI_Q, "r": kVK_ANSI_R, "s": kVK_ANSI_S, "t": kVK_ANSI_T, "u": kVK_ANSI_U,
+    "v": kVK_ANSI_V, "w": kVK_ANSI_W, "x": kVK_ANSI_X, "y": kVK_ANSI_Y, "z": kVK_ANSI_Z,
+    "0": kVK_ANSI_0, "1": kVK_ANSI_1, "2": kVK_ANSI_2, "3": kVK_ANSI_3, "4": kVK_ANSI_4,
+    "5": kVK_ANSI_5, "6": kVK_ANSI_6, "7": kVK_ANSI_7, "8": kVK_ANSI_8, "9": kVK_ANSI_9,
+  ]
+  static let modifiers = ["ctrl": controlKey, "control": controlKey, "alt": optionKey, "option": optionKey, "opt": optionKey,
+                          "cmd": cmdKey, "command": cmdKey, "shift": shiftKey]
+
+  static func register(_ spec: String) {
+    var mods = 0
+    var key: Int?
+    for part in spec.lowercased().split(separator: "+").map(String.init) {
+      if let m = modifiers[part] { mods |= m } else if part.count == 1, let k = keys[part.first!] { key = k } else { key = nil; break }
+    }
+    guard let key, mods != 0 else { return log("shortcut \"\(spec)\" not understood (like ctrl+alt+c): none set") }
+    var kind = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+    InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
+      service.send(["type": "hotkey"])
+      return noErr
+    }, 1, &kind, nil, nil)
+    var ref: EventHotKeyRef?
+    let id = EventHotKeyID(signature: OSType(0x4341_5052), id: 1) // 'CAPR'
+    let status = RegisterEventHotKey(UInt32(key), UInt32(mods), id, GetApplicationEventTarget(), 0, &ref)
+    if status != noErr { log("shortcut \"\(spec)\" is taken by something else (\(status)): none set") }
+  }
+}
+
 // ---------- the overlay ----------
 
 final class OverlayPanel: NSPanel {
@@ -249,6 +286,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   let url: URL
   let output: String?
   let icon: String?
+  let hotkey: String?
+  var demo: NSWindow?
   var panel: OverlayPanel!
   var view: OverlayView!
   var statusItem: NSStatusItem?
@@ -258,10 +297,11 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   var cursorAt = 0.0
   var cursorQueued = false
 
-  init(url: URL, output: String?, icon: String?) {
+  init(url: URL, output: String?, icon: String?, hotkey: String?) {
     self.url = url
     self.output = output
     self.icon = icon
+    self.hotkey = hotkey
   }
 
   var screen: NSScreen {
@@ -316,6 +356,7 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
     }
 
     startStatusItem()
+    if let hotkey, !hotkey.isEmpty { HotKey.register(hotkey) }
     startPointer()
     startWindows()
     Sensors.shared.start()
@@ -473,9 +514,10 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
     var fg = 0
     var fullscreen = false
     for w in list {
+      // everyone's windows but our own, except the demo's stand-in terminal
       guard w[kCGWindowLayer as String] as? Int == 0,
-            let pid = w[kCGWindowOwnerPID as String] as? Int32, pid != me,
-            let id = w[kCGWindowNumber as String] as? Int,
+            let pid = w[kCGWindowOwnerPID as String] as? Int32,
+            let id = w[kCGWindowNumber as String] as? Int, pid != me || id == demo?.windowNumber,
             (w[kCGWindowAlpha as String] as? Double ?? 1) > 0.01,
             let box = w[kCGWindowBounds as String] as? NSDictionary,
             let r = CGRect(dictionaryRepresentation: box),
@@ -554,6 +596,40 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
     return menuPick
   }
 
+  // ---------- the demo's stand-in terminal ----------
+  // A window of our own that looks like a terminal after a test run, for her to sit on and take
+  // over. It's the one window of ours that counts as a window (pollWindows).
+
+  func demoWindow(_ open: Bool) -> Bool {
+    demo?.close()
+    demo = nil
+    defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.pollWindows() } }
+    guard open else { return false }
+    let f = screen.visibleFrame
+    let size = NSSize(width: 560, height: 250)
+    let origin = NSPoint(x: f.minX + (f.width - size.width) * 0.42, y: f.minY + (f.height - size.height) * 0.4)
+    let win = NSWindow(contentRect: NSRect(origin: origin, size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    win.title = "night-city-api"
+    win.isReleasedWhenClosed = false
+    win.appearance = NSAppearance(named: .darkAqua)
+    win.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1)
+    let green = NSColor(red: 0.35, green: 0.85, blue: 0.45, alpha: 1)
+    let text = NSMutableAttributedString()
+    for (line, color) in [
+      ("~/night-city-api$ npm test -- gigs\n", green), ("  GET /gigs\n", NSColor.white),
+      ("    ok returns 20 items per page\n    ok paginates with a cursor\n    ok rejects a bad cursor\n", green),
+      ("  6 passing (212ms)\n", NSColor.white), ("~/night-city-api$ ", green),
+    ] {
+      text.append(NSAttributedString(string: line, attributes: [.foregroundColor: color, .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)]))
+    }
+    let label = NSTextField(labelWithAttributedString: text)
+    label.frame = NSRect(x: 14, y: 0, width: size.width - 28, height: size.height - 12)
+    win.contentView?.addSubview(label)
+    win.orderFrontRegardless() // on top, without taking the keyboard from what you're in
+    demo = win
+    return true
+  }
+
   // where her icon is, in her coordinates
   func tray() -> Any {
     guard let frame = statusItem?.button?.window?.frame, frame.width > 0, screen.frame.intersects(frame) else { return NSNull() }
@@ -615,6 +691,8 @@ final class Shell: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
       }
     case "media":
       Player.control(msg["action"] as? String ?? "") { answer($0) }
+    case "demoWindow":
+      answer(demoWindow(msg["open"] as? Bool ?? false))
     case "playUri":
       Player.play(msg["uri"] as? String ?? "") { answer($0) }
     case "mediaStatus":
@@ -662,11 +740,11 @@ func option(_ name: String) -> String? {
   return args[i + 1]
 }
 guard let target = option("--url").flatMap(URL.init(string:)) else {
-  FileHandle.standardError.write("usage: capri-shell --url <url> [--output <screen name>] [--icon <png>]\n".data(using: .utf8)!)
+  FileHandle.standardError.write("usage: capri-shell --url <url> [--output <screen name>] [--icon <png>] [--hotkey ctrl+alt+c]\n".data(using: .utf8)!)
   exit(2)
 }
 let app = NSApplication.shared
-let shell = Shell(url: target, output: option("--output"), icon: option("--icon"))
+let shell = Shell(url: target, output: option("--output"), icon: option("--icon"), hotkey: option("--hotkey"))
 app.delegate = shell
 app.setActivationPolicy(.accessory) // no Dock icon, never in the app switcher
 let term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)

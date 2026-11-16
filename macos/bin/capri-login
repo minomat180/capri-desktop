@@ -1,0 +1,50 @@
+#!/bin/sh
+# Start Capri when you log in (a LaunchAgent), or stop doing so.
+#   capri-login install     start her at login, and now
+#   capri-login uninstall   stop starting her at login, and stop her now
+#   capri-login status
+# If she crashes, launchd starts her again; `capri-ctl quit` is a clean exit and stays quit
+# until the next login (or `launchctl kickstart gui/$(id -u)/ch.mino.capri`).
+set -eu
+label=ch.mino.capri
+plist="$HOME/Library/LaunchAgents/$label.plist"
+root=$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)
+domain="gui/$(id -u)"
+
+case "${1:-status}" in
+  install)
+    node=$(command -v node) || { echo "capri-login: node is not on your PATH" >&2; exit 1; }
+    [ -x "$root/macos/shell/Capri.app/Contents/MacOS/capri-shell" ] || "$root/macos/shell/build.sh"
+    mkdir -p "$HOME/Library/LaunchAgents"
+    # launchd starts with a bare PATH: node, and pi for her chat, have to be on it
+    cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/sh</string><string>$root/linux/bin/capri</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>$(dirname "$node"):$HOME/.pi/agent/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+PLIST
+    launchctl bootout "$domain/$label" 2>/dev/null || true
+    "$root/linux/bin/capri-ctl" quit 2>/dev/null && sleep 1 || true # one started by hand
+    launchctl bootstrap "$domain" "$plist"
+    echo "Capri starts at login now (and is starting). Logs: ~/.local/state/capri/capri.log" ;;
+  uninstall)
+    launchctl bootout "$domain/$label" 2>/dev/null || true
+    rm -f "$plist"
+    echo "Capri no longer starts at login." ;;
+  status)
+    if launchctl print "$domain/$label" >/dev/null 2>&1; then echo "starts at login: yes"; else echo "starts at login: no"; fi
+    if "$root/linux/bin/capri-ctl" running; then echo "running: yes"; else echo "running: no"; fi ;;
+  *) echo "usage: capri-login install|uninstall|status" >&2; exit 2 ;;
+esac

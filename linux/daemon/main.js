@@ -286,8 +286,10 @@ function runHooks(action, { quiet = false } = {}) {
 // window rule puts it (app id capri-demo, see linux/README.md).
 let demoTerm = null;
 function demoWindow(open) {
+  // macOS: the overlay app puts up a window of its own that looks the part
+  if (MAC) return native.request('demoWindow', { open }).then(Boolean);
   if (demoTerm) { try { demoTerm.kill(); } catch { /* gone */ } demoTerm = null; }
-  if (!open || MAC) return false; // no demo terminal on macOS yet: she plays the demo without one
+  if (!open) return false;
   const script = 'printf "\\033[32m~/night-city-api$ npm test -- gigs\\033[0m\\n  GET /gigs\\n'
     + '\\033[32m    ok returns 20 items per page\\n    ok paginates with a cursor\\n    ok rejects a bad cursor\\033[0m\\n'
     + '  6 passing (212ms)\\n\\033[32m~/night-city-api$\\033[0m "; sleep 600';
@@ -325,7 +327,8 @@ async function openMenu() {
   ];
   menuOpen = true;
   if (MAC) {
-    const shown = items.map(([label]) => (typeof label === 'string' ? { label: label.replace('  (Super+C)', '') } : label));
+    const keys = hotkey().split('+').map((k) => ({ ctrl: '⌃', control: '⌃', alt: '⌥', option: '⌥', opt: '⌥', cmd: '⌘', command: '⌘', shift: '⇧' })[k] || k.toUpperCase()).join('');
+    const shown = items.map(([label]) => (typeof label === 'string' ? { label: label.replace('(Super+C)', keys && `(${keys})`).trim() } : label));
     // open as long as you leave it open
     const i = await native.request('menu', { items: shown }, 10 * 60 * 1000);
     menuOpen = false;
@@ -548,6 +551,10 @@ function pollCursor() {
 
 // ---------- the overlay ----------
 
+// macOS: the shortcut that puts her away and brings her back (`hotkey` in her config, '' for
+// none). On Linux that's a mango bind running `capri-ctl stow`.
+const hotkey = () => String(config.load().hotkey ?? 'ctrl+alt+c').toLowerCase().replace(/\s+/g, '');
+
 let shell = null;
 let shellRestarts = 0;
 let stopping = false;
@@ -557,7 +564,7 @@ function startShell() {
   if (MAC) {
     const bin = path.join(ROOT, 'macos', 'shell', 'Capri.app', 'Contents', 'MacOS', 'capri-shell');
     if (!fs.existsSync(bin)) { log('the overlay is not built yet: run macos/shell/build.sh'); return; }
-    const args = ['--url', url, '--icon', path.join(ROOT, 'assets', 'icons', 'capri.png')];
+    const args = ['--url', url, '--icon', path.join(ROOT, 'assets', 'icons', 'capri.png'), '--hotkey', hotkey()];
     if (desktop.output) args.push('--output', desktop.output);
     // stdin: our requests; fd 3: approval clicks; fd 4: its replies and what it notices
     shell = spawn(bin, args, { stdio: ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'] });
@@ -629,6 +636,7 @@ async function main() {
   });
   desktop.on('error', (err) => log('mango ipc:', err.message));
   native?.on('menu', () => openMenu()); // a click on her menu bar icon
+  native?.on('hotkey', () => toggleVisible());
   await desktop.start();
   server.on('error', (err) => {
     log(err.code === 'EADDRINUSE' ? `port ${PORT} in use: is Capri already running?` : `server: ${err.message}`);
