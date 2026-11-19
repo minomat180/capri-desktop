@@ -42,6 +42,9 @@ const REPLY_MAX = 6000;
 function slim(evt) {
   const out = {};
   for (const key of KEEP) if (evt[key] !== undefined) out[key] = trim(evt[key]);
+  // Claude Code itself (this hook's parent): Capri finds its window from its process tree
+  out.agent = 'claude';
+  out.agent_pid = process.ppid;
   const reply = evt.last_assistant_message;
   if (typeof reply === 'string') out.last_assistant_message = reply.length > REPLY_MAX ? reply.slice(0, REPLY_MAX) + '…' : reply;
   return out;

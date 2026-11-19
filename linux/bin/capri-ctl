@@ -1,0 +1,19 @@
+#!/bin/sh
+# Talk to a running Capri.
+#   capri-ctl stow|show|hide|menu|status|teleport|satellite|demo|report|chat|quit
+#   capri-ctl watch     stream her state as JSON lines (for the waybar module)
+#   capri-ctl running   exit 0 if she's up
+dir=${XDG_RUNTIME_DIR:-/tmp}/capri
+port=$(cat "$dir/port" 2>/dev/null || echo 47823)
+token=$(cat "$dir/token" 2>/dev/null)
+cmd=${1:-status}
+case "$cmd" in
+  running) curl -sf "http://127.0.0.1:$port/health" >/dev/null ;;
+  watch)
+    [ -n "$token" ] || { echo '{"text":"","class":"off"}'; exit 1; }
+    curl -sN -H "x-capri-token: $token" "http://127.0.0.1:$port/status/stream" | sed -un 's/^data: //p' ;;
+  *)
+    [ -n "$token" ] || { echo "capri is not running" >&2; exit 1; }
+    curl -sf -X POST -H "x-capri-token: $token" "http://127.0.0.1:$port/ctl/$cmd" >/dev/null \
+      || { echo "capri-ctl: $cmd failed (is capri running?)" >&2; exit 1; } ;;
+esac

@@ -1,17 +1,36 @@
 // Talking to her: you type in her panel, and a local model (Ollama, from the main process) answers
 // as her, in writing. The replies are AI-generated, and the panel says so on every chat.
-// Ask her to close an app and she will (Windows): she spots it in what you wrote (or the model names
+// Ask her to close an app and she will: she spots it in what you wrote (or the model names
 // it with a tag in its answer), shows you a button with that app's name, and only your click closes it.
 
 import { pick, fmt } from './util.js';
+import { parseReminder, clock } from './reminders.js';
 
 const REMEMBER = 12; // messages of this conversation she keeps in mind
 const LANGUAGE = { fr: 'French', en: 'English', es: 'Spanish', pt: 'Brazilian Portuguese', ru: 'Russian' };
 const STAY_MS = 10 * 60 * 1000; // no wandering off mid-conversation
 const LOADING_AFTER_MS = 5000;
 const CLOSE_TAG = /\[\[\s*close\s*:?\s*([^\]]*)\]\]/i; // [[close: AM Music]] at the end of her answer
-// "close", "shut down", "ferme", "quitte", "cierra", "fecha", "закрой"... in any of her languages
-const CLOSE_ASK = /\b(close|shut|quit|kill|exit)|ferm|quitt|coupe|arr[êe]t|cierr|cerra|fech|закр|выключ/i;
+// "close", "shut down", "quit", "kill", "exit"...
+const CLOSE_ASK = /\b(close|shut|quit|kill|exit)\b/i;
+const MEDIA_TAG = /\[\[\s*(?:media|music)\s*:?\s*(next|previous|pause|play|playpause)\s*\]\]/i; // [[media: next]]
+// "skip this song", "next track", "go back a song", "pause the music"...
+const MEDIA_ASK = [
+  ['next', /\b(skip|next)\b.*\b(song|track|tune|one)\b|\bskip\b(?!.*\bback\b)/i],
+  ['previous', /\b(previous|last|go back|back)\b.*\b(song|track|tune)\b/i],
+  ['pause', /\b(pause|stop)\b.*\b(music|song|spotify|track)\b/i],
+  ['play', /\b(resume|unpause|play)\b.*\b(music|spotify)\b/i],
+];
+const PLAY_TAG = /\[\[\s*play\s*:?\s*([^\]]+)\]\]/i; // [[play: smooth operator sade]]
+const PLAYLIST_TAG = /\[\[\s*playlist\s*:?\s*([^\]]+)\]\]/i; // [[playlist: lofi hip hop]]
+const SEARCH_TAG = /\[\[\s*search\s*:?\s*([^\]]+)\]\]/i; // [[search: daft punk]]
+// "search for daft punk (on spotify)", "find me some sade songs", "look up instant crush"
+const SEARCH_ASK = /\b(?:search(?: spotify)?(?: for)?|find(?: me)?|look up|look for)\s+(.+?)(?:\s+(?:on|in)\s+spotify)?(?:\s+(?:for me|please|pls|plz))*\s*[.!?]*$/i;
+// "play smooth operator by sade (on spotify) pls": the song; "play some music" isn't one
+const PLAY_ASK = /\b(?:play|put on|queue up)\s+(.+?)(?:\s+(?:on|in)\s+spotify)?(?:\s+(?:for me|please|pls|plz|now))*\s*[.!?]*$/i;
+const NOT_A_SONG = /^(?:some |the |a |any |this |that |)(?:music|song|songs|tunes?|something|spotify|it|that|this|again|next|previous|one)(?: again| song| one)?$/i;
+const OPEN_TAG = /\[\[\s*open\s*:?\s*([^\]]*)\]\]/i; // [[open: Firefox]]
+const OPEN_ASK = /\b(open|launch|start|run|fire up|bring up)\b/i;
 
 export class Chat {
   constructor({ capri, panel, voice, host, brain }) {
@@ -25,6 +44,9 @@ export class Chat {
     this.turn = 0;     // id of the answer coming in, if any
     this.answer = '';
     this.apps = [];    // the apps open on this PC, as last listed: [{ name, label }]
+    this.installed = []; // the apps she can open: [{ id, name }]
+    this.reminders = null; // the ones she keeps (reminders.js, from app.js)
+    this.waitingWhen = null; // you asked for one without saying when: { text, until }
     this.appsReady = Promise.resolve();
     host.onChatDelta(({ id, text }) => this.onDelta(id, text));
   }
@@ -47,6 +69,11 @@ export class Chat {
     const status = await host.chatStatus();
     if (!status.ok) {
       // no Ollama, or nothing to talk with yet: what to do about it
+      if (status.error === 'noclaude') {
+        this.panel.say({ kind: 'info', face: 'aside', guide: true, line: t.noClaude, quote: t.noClaudeHow,
+          actions: [{ id: 'ok', label: t.ok, primary: true }], onAction: () => this.panel.hide(), hold: null });
+        return;
+      }
       const offline = status.error === 'offline';
       capri.perform('curious', capri.towardCenter());
       this.panel.say({
@@ -54,14 +81,9 @@ export class Chat {
         face: 'aside',
         guide: true,
         line: offline ? t.offline : t.noModel,
-        quote: offline ? t.offlineHow : t.noModelHow,
-        actions: offline
-          ? [{ id: 'get', label: t.getOllama, primary: true }, { id: 'ok', label: t.ok }]
-          : [{ id: 'ok', label: t.ok, primary: true }],
-        onAction: (id) => {
-          if (id === 'get') host.openOllama();
-          this.panel.hide();
-        },
+        quote: fmt(offline ? t.offlineHow : t.noModelHow, { host: status.host || 'Ollama' }),
+        actions: [{ id: 'ok', label: t.ok, primary: true }],
+        onAction: () => this.panel.hide(),
         hold: null,
       });
       return;
@@ -114,6 +136,7 @@ export class Chat {
     this.panel.setChatBusy(true);
     this.panel.setActions([]); // a close button she offered before goes with a new message
     this.panel.chatTurn({ quote: text, face: 'aside' });
+    const reminder = this.noteReminder(text);
     this.capri.pulse();
     await Promise.race([this.appsReady, new Promise((r) => setTimeout(r, 1500))]);
     const messages = [{ role: 'system', content: this.persona() }, ...this.history.slice(-REMEMBER)];
@@ -138,17 +161,172 @@ export class Chat {
     }
     const answer = clean(res.text) || '…';
     this.history.push({ role: 'assistant', content: answer });
+    if (reminder) this.showReminder(reminder, answer);
     this.panel.stream(answer, { done: true });
     this.panel.setFace(mood(answer));
     this.panel.setChatBusy(false);
     // what you asked for first (a small model doesn't always write its tag right), else its tag
-    const wanted = this.askedToClose(text) || tagged(res.text);
-    if (wanted) this.offerClose(wanted, answer);
+    const asked = askedMusic(text);
+    const tagged2 = (re) => re.exec(res.text)?.[1]?.trim();
+    const want = asked
+      || (tagged2(SEARCH_TAG) && { mode: 'search', query: tagged2(SEARCH_TAG) })
+      || (tagged2(PLAYLIST_TAG) && { mode: 'playlist', query: tagged2(PLAYLIST_TAG) })
+      || (tagged2(PLAY_TAG) && { mode: 'track', query: tagged2(PLAY_TAG) });
+    const song = want?.query;
+    const music = !song && (MEDIA_TAG.exec(res.text)?.[1]?.toLowerCase() || MEDIA_ASK.find(([, re]) => re.test(text))?.[0]);
+    const toOpen = !song && !music && (tagged(res.text, OPEN_TAG) || this.askedToOpen(text));
+    const wanted = !song && !music && !toOpen && (this.askedToClose(text) || tagged(res.text));
+    if (song) this.playSong(want, answer);
+    else if (music) this.controlMusic(music, answer);
+    else if (toOpen) this.openApp(toOpen, answer);
+    else if (wanted) this.offerClose(wanted, answer);
     this.listApps(); // fresh for the next message
   }
 
+  // "remind me in 20 minutes to take the bread out": set straight off your message (so it works
+  // the same on the smallest model), before her answer is even asked for.
+  noteReminder(text) {
+    if (!this.reminders) return null;
+    const t = this.brain.t.remind;
+    // she asked when, and this is the answer
+    if (this.waitingWhen && Date.now() < this.waitingWhen.until) {
+      const when = parseReminder(`remind me ${text}`) || parseReminder(text);
+      const at = when?.at;
+      const said = this.waitingWhen.text;
+      this.waitingWhen = null;
+      if (at) return this.reminders.add(at, said);
+      return null;
+    }
+    const asked = parseReminder(text);
+    if (!asked) return null;
+    if (!asked.at) { // "remind me to call mum" with no time: she asks when
+      this.waitingWhen = { text: asked.text || '', until: Date.now() + 5 * 60 * 1000 };
+      return null;
+    }
+    return this.reminders.add(asked.at, asked.text || '');
+  }
+
+  // A line under her answer saying it's set, with a button to take it back.
+  showReminder(r, answer) {
+    const t = this.brain.t.remind;
+    const line = fmt(r.text ? t.set : t.setBare, { time: clock(r.at, this.brain.lang), text: r.text });
+    this.panel.stream(`${answer}\n${line}`, { done: true });
+    this.panel.setActions([{ id: 'cancel', label: t.cancel }], () => {
+      this.reminders.remove(r.id);
+      this.panel.setActions([]);
+      this.panel.stream(`${answer}\n${t.cancelled}`, { done: true });
+    });
+  }
+
   listApps() {
-    this.appsReady = this.host.openApps().then((list) => { this.apps = list || []; }).catch(() => {});
+    this.appsReady = Promise.all([
+      this.host.openApps().then((list) => { this.apps = list || []; }),
+      this.host.installedApps().then((list) => { this.installed = list || []; }),
+      this.host.mediaStatus().then((m) => { this.music = m; }),
+    ]).catch(() => {});
+  }
+
+  // "open firefox": an installed app, named in a message asking to open something.
+  askedToOpen(text) {
+    if (!OPEN_ASK.test(text) || CLOSE_ASK.test(text)) return null;
+    const said = simple(text);
+    let best = null;
+    for (const app of this.installed) {
+      for (const name of [simple(app.name), simple(app.name.split(' ')[0])]) {
+        if (name.length >= 3 && said.includes(name) && (!best || name.length > best.length)) best = { app, length: name.length };
+      }
+    }
+    return best?.app.name || null;
+  }
+
+  // Skip / back / pause / play, on Spotify (or whatever player is up). Harmless, so no button.
+  async controlMusic(action, answer) {
+    const { t, capri } = this;
+    const res = await this.host.media(action);
+    if (!this.open) return;
+    let line;
+    if (!res?.ok) line = res?.error === 'noplayer' ? t.noPlayer : t.mediaFailed;
+    else {
+      const track = res.track || 'the next one';
+      line = fmt({ next: t.skipped, previous: t.back, pause: t.paused }[action] || t.resumed, { track });
+      const h = capri.head();
+      capri.zap(h.x + capri.towardCenter() * 200, h.y - 150);
+    }
+    this.panel.stream(`${answer}\n${line}`, { done: true });
+  }
+
+  // "play X": she looks it up, plays the top hit, and offers the runners-up (and Spotify's own
+  // search) as buttons in case it's the wrong one. "play some X" does the same with playlists;
+  // "search X" only lists what she found, as buttons, and plays nothing until you pick.
+  async playSong({ mode, query: song }, answer) {
+    const { t, capri, host } = this;
+    this.panel.stream(`${answer}\n${fmt(t.looking, { song })}`);
+    const kind = mode === 'playlist' ? 'playlist' : 'track';
+    const hits = await host.musicSearch({ query: song, kind }).catch(() => []);
+    if (!this.open) return;
+    if (!hits?.length) {
+      const res = await host.musicOpenSearch(song).catch(() => null);
+      this.panel.stream(`${answer}\n${res?.ok ? fmt(t.notFound2, { song }) : t.noSpotify}`, { done: true });
+      return;
+    }
+    const playIt = async (hit) => {
+      this.panel.setActions([]);
+      const res = await host.musicPlay(hit.uri || hit.id).catch(() => null);
+      if (!this.open) return;
+      if (!res?.ok) {
+        this.panel.stream(`${answer}\n${t.noSpotify}`, { done: true });
+        return;
+      }
+      const h = capri.head();
+      capri.zap(h.x + capri.towardCenter() * 200, h.y - 150);
+      const track = hit.kind === 'playlist' ? fmt(t.playlist, { name: hit.name }) : res.track || `${hit.artist} – ${hit.name}`;
+      this.panel.stream(`${answer}\n${fmt(t.nowPlaying, { track })}`, { done: true });
+      // wrong one? the others she found, and Spotify's search
+      const others = hits.filter((x) => x.id !== hit.id).slice(0, 2);
+      offer(others);
+    };
+    // the hits as buttons (click one to play it), plus Spotify's own search
+    const offer = (list) => this.panel.setActions(
+      [
+        ...list.map((x) => ({ id: x.id, label: clipLabel(label(x)) })),
+        { id: 'search', label: t.searchIt },
+      ],
+      (id) => {
+        if (id === 'search') {
+          this.panel.setActions([]);
+          host.musicOpenSearch(song);
+          return;
+        }
+        const alt = hits.find((x) => x.id === id);
+        if (alt) playIt(alt);
+      },
+    );
+    if (mode === 'search') {
+      this.panel.stream(`${answer}\n${fmt(t.found, { song })}`, { done: true });
+      offer(hits.slice(0, 4));
+      return;
+    }
+    playIt(hits[0]);
+  }
+
+  // Opening is harmless, so no button: she just does it (only apps from the installed list).
+  async openApp(wanted, answer) {
+    const { t, capri } = this;
+    const app = await this.host.findInstalled(wanted);
+    if (!this.open) return;
+    if (!app) {
+      this.panel.stream(`${answer}\n${fmt(t.notInstalled, { app: wanted })}`, { done: true });
+      return;
+    }
+    const res = await this.host.launchApp(app.id);
+    if (!res?.ok) {
+      this.panel.stream(`${answer}\n${fmt(t.notInstalled, { app: wanted })}`, { done: true });
+      return;
+    }
+    const h = capri.head();
+    capri.zap(h.x + capri.towardCenter() * 280, h.y - 170);
+    this.panel.stream(`${answer}\n${fmt(t.opening, { app: res.name })}`, { done: true });
+    setTimeout(() => this.listApps(), 3000);
   }
 
   // "close am music pls": an app that's open, named in a message asking to close something.
@@ -204,15 +382,28 @@ export class Chat {
     this.listApps();
   }
 
-  // What she can do on the PC: close an app you ask her to (Windows), and nothing else.
+  // What she can do on the PC: open an installed app, close an open one (after a click), nothing else.
   powers() {
-    const cant = 'you can\'t see the user\'s screen or files, and you can\'t open apps or touch anything else on their PC (music, settings, files): if asked, say plainly that you can\'t, in character, and don\'t pretend to.';
-    if (!this.apps.length) return [`You can't close apps here, and ${cant}`];
-    const open = this.apps.map(({ name, label }) => (label && label !== name ? `${name} (${label})` : name)).join(', ');
-    return [
-      `You can close an app that's open on the user's PC, only when they ask you to. Then say in a few words that you will, and end your answer with [[close: NAME]], NAME being the exact name from this list (the part before the parentheses). They get a button to confirm it, so never say it's already done. Apps open right now: ${open}.`,
-      `Apart from that, ${cant}`,
-    ];
+    const cant = 'you can\'t see the user\'s screen or files, and you can\'t touch anything else on their PC (settings, files, volume, commands): if asked, say plainly that you can\'t, in character, and don\'t pretend to.';
+    const out = [];
+    if (this.installed.length) {
+      const names = [...new Set(this.installed.map((a) => a.name))].join(', ');
+      out.push(`You can open an app for the user when they ask you to. Then say in a few words that you're on it, and end your answer with [[open: NAME]], NAME being the exact name from this list. Apps installed: ${names}.`);
+    }
+    if (this.apps.length) {
+      const open = this.apps.map(({ name, label }) => (label && label !== name ? `${name} (${label})` : name)).join(', ');
+      out.push(`You can close an app that's open on the user's PC, only when they ask you to. Then say in a few words that you will, and end your answer with [[close: NAME]], NAME being the exact name from this list (the part before the parentheses). They get a button to confirm it, so never say it's already done. Apps open right now: ${open}.`);
+    }
+    out.push('You can find and play music on Spotify. A specific song: end your answer with [[play: SONG ARTIST]] (add the artist if you know it). A mood or genre ("something chill", "some lofi"): end with [[playlist: WORDS]]. If they only want to look for something: end with [[search: WORDS]], they get the results to pick from. Say a few words first; never claim it is already playing.');
+    out.push('You can control the music player (Spotify): when the user asks to skip, go back, pause or resume, say a few words and end your answer with [[media: next]], [[media: previous]], [[media: pause]] or [[media: play]]. Never say which song comes next, you don\'t know until it plays.');
+    if (this.music?.track) out.push(`Playing right now (${this.music.state || 'unknown'}): ${this.music.track}.`);
+    if (this.reminders) {
+      out.push('You keep reminders for the user. When they ask to be reminded of something at a given time, your system sets it from their message as they send it, and a line under your answer shows it. Just confirm it in a few words, in character, and never say you can\'t. If they didn\'t say when, ask them when.');
+      const soon = this.reminders.upcoming.slice(0, 6);
+      if (soon.length) out.push(`Reminders you're keeping for them: ${soon.map((r) => `${clock(r.at, this.brain.lang)}${r.text ? ` (${r.text})` : ''}`).join('; ')}.`);
+    }
+    out.push(`Apart from that, ${cant}`);
+    return out;
   }
 
   onDelta(id, piece) {
@@ -227,12 +418,12 @@ export class Chat {
     const language = LANGUAGE[this.brain.lang] || 'English';
     return [
       'You are Capri, the personality construct from Project Capricorn (Cyberpunk: Edgerunners, season 2): dozens of minds fused into one digital ghost, so now and then you say "we".',
-      'You live on the user\'s desktop as a small glitchy figure and keep an eye on Claude Code, their AI coding assistant, for them. You love watching the satellite cross the night sky and dream of reaching it.',
+      'You live on the user\'s desktop (Linux, the mango window manager) as a small glitchy figure and keep an eye on their AI coding agent, Claude Code, for them. You love watching the satellite cross the night sky and dream of reaching it.',
       'How you talk: playful, a little mischievous and teasing, warm underneath, never cruel. Night City slang now and then (choom, preem, nova, gonk, flatline), not in every sentence.',
       `Rules: answer in the language the user writes in (${language} if unsure). Keep it short: one to three sentences of plain text, no markdown, no lists, no emoji. Stay in character.`,
       'You are an AI-generated fan version of the character, not the real one: say so if asked.',
       ...this.powers(),
-      'For what Claude is doing, only use what follows, and never make anything up.',
+      'For what the agents are doing, only use what follows, and never make anything up.',
       `Right now: ${this.brain.context()}`,
     ].join('\n');
   }
@@ -249,12 +440,43 @@ function clean(text) {
 }
 
 // The app named by her close tag: [[close: AM Music]], or a sloppier [[close]] AM Music.
-function tagged(text) {
-  const tag = CLOSE_TAG.exec(text);
+function tagged(text, re = CLOSE_TAG) {
+  const tag = re.exec(text);
   if (!tag) return null;
   const name = tag[1].trim() || text.slice(tag.index + tag[0].length).split('\n')[0].replace(/^[\s:.]+|[\s.!]+$/g, '');
   return name || null;
 }
+
+// What you asked for, if it's music: { mode: 'track' | 'playlist' | 'search', query } or null.
+// "play smooth operator by sade" -> track "smooth operator sade"; "play some lofi" / "play a
+// chill playlist" -> playlist; "search for daft punk" -> search. "play some music" isn't one.
+function askedMusic(text) {
+  const said = String(text).trim();
+  const s = SEARCH_ASK.exec(said);
+  if (s) {
+    const query = tidy(s[1]);
+    if (query && !NOT_A_SONG.test(query)) return { mode: 'search', query };
+  }
+  const m = PLAY_ASK.exec(said);
+  if (!m) return null;
+  let query = tidy(m[1]);
+  if (!query || NOT_A_SONG.test(query) || query.length < 2) return null;
+  // "some lofi", "a chill playlist", "lofi mix", "jazz music": a playlist
+  const listy = /^(?:some|a|an)\s+/i.test(query) || /\s+(?:playlist|mix|music|songs|vibes|beats)$/i.test(query);
+  if (listy) {
+    query = query.replace(/^(?:some|a|an)\s+/i, '').replace(/\s+(?:playlist|mix)$/i, '').trim();
+    if (!query || NOT_A_SONG.test(query)) return null;
+    return { mode: 'playlist', query };
+  }
+  return { mode: 'track', query };
+}
+
+const tidy = (q) => q.replace(/\bby\b/gi, ' ').replace(/^(?:the song|song|track)\s+/i, '').replace(/\s+/g, ' ').trim();
+
+// a hit as a button: "Smooth Operator – Sade", "Lo Fi Hip Hop (playlist)"
+const label = (x) => (x.kind === 'playlist' ? `${x.name} (playlist)` : `${x.name} – ${x.artist}`);
+
+const clipLabel = (s) => (s.length > 34 ? `${s.slice(0, 33)}…` : s);
 
 const simple = (text) => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 

@@ -7,3 +7,8 @@ Thumbs.db
 
 # local debug captures
 captures/
+__pycache__/
+*.pyc
+linux/tts/venv/
+linux/tts/voices/
+linux/tts/__pycache__/

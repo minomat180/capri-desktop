@@ -18,8 +18,9 @@ export const FACES = {
   grin: 'capri-face.png',
 };
 const KIND_FACE = { alert: 'many', done: 'look', error: 'laugh', work: 'calm', idle: 'calm', report: 'smug', chat: 'look' };
-const PRIORITY = { info: 1, idle: 1, work: 2, done: 3, error: 3, report: 3, chat: 3, alert: 4 };
+const PRIORITY = { info: 1, idle: 1, work: 2, done: 3, error: 3, report: 3, chat: 3, remind: 4, alert: 4 };
 const DECODE_STEP_MS = 28;
+const TICKER_MAX = 3; // plates over her head at once, one per busy agent
 const COUNT_MS = 700; // her report's numbers counting up
 
 export class Panel {
@@ -39,8 +40,11 @@ export class Panel {
     this.log = panel.querySelector('.panel__log');
     this.tag = panel.querySelector('.panel__tag');
     this.state = panel.querySelector('.panel__state');
-    this.tickerVerb = ticker.querySelector('.ticker__verb');
-    this.tickerTarget = ticker.querySelector('.ticker__target');
+    // one plate per busy session (up to TICKER_MAX); the one in the page is the template
+    this.tickerTemplate = ticker.querySelector('.ticker__plate');
+    this.tickerTemplate.remove();
+    this.tickerPlates = new Map(); // row key -> plate element
+    this.tickerRows = [];
     this.current = null;
     this.hideTimer = null;
     this.decodeTimer = null;
@@ -60,6 +64,11 @@ export class Panel {
     this.chatSend = panel.querySelector('.panel__send');
     this.chatClose = panel.querySelector('.panel__close');
     this.note = panel.querySelector('.panel__note');
+    // the agents' activity, shown inside the chat (the floating ticker would sit on top of it)
+    this.activity = panel.querySelector('.panel__activity');
+    this.activityWho = panel.querySelector('.panel__activity-who');
+    this.activityVerb = panel.querySelector('.panel__activity-verb');
+    this.activityTarget = panel.querySelector('.panel__activity-target');
     this.chatForm.addEventListener('click', (e) => e.stopPropagation());
     this.chatForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -107,10 +116,16 @@ export class Panel {
     // nor on something you may be reading: an answer, her report (progress lines don't knock it off)
     if (cur?.reply && this.visible && PRIORITY[msg.kind] < 2) return false;
     if (cur?.report && this.visible && PRIORITY[msg.kind] < 3) return false;
+    // nor on a question waiting for your answer (a vault approval): only another one replaces it
+    if (cur?.sticky && this.visible && !msg.sticky) return false;
     // nor on a chat with her: only a permission prompt breaks in; Claude finishing waits until after
     // (even while she teleports and the panel is put aside for a moment)
     if (cur?.chat && !this.el.hidden && !this.leaving && PRIORITY[msg.kind] < 4) {
       if (PRIORITY[msg.kind] >= 3) this.missed = { ...msg, missedAt: performance.now() };
+      // still, you see it happen: a line in the chat's activity strip
+      if (msg.kind !== 'idle' && msg.line) {
+        this.showActivity({ who: msg.tag, verb: msg.badge || this.labels.state?.[msg.kind] || msg.kind, target: msg.line, error: msg.kind === 'error', news: true });
+      }
       return false;
     }
     if (cur && this.visible) this.onDismiss?.(cur);
@@ -130,9 +145,11 @@ export class Panel {
     this.el.classList.toggle('has-reply', Boolean(msg.reply));
     this.el.classList.toggle('has-report', Boolean(msg.report));
     this.el.classList.toggle('is-guide', Boolean(msg.guide));
+    this.el.classList.toggle('is-sticky', Boolean(msg.sticky));
     this.renderReport(msg.report);
     this.renderActions(msg.actions, msg.onAction);
     this.renderChat(msg.chat);
+    this.showActivity(msg.chat ? this.tickerAction : null);
     this.summary.textContent = msg.summary || '';
     this.summary.hidden = !msg.summary;
     this.renderLog(msg.log || []);
@@ -234,8 +251,8 @@ export class Panel {
       button.textContent = label;
       button.addEventListener('click', (e) => {
         e.stopPropagation(); // a click on the panel itself closes it
-        if (onAction) onAction(id);
-        else this.onAction?.(id);
+        if (onAction) onAction(id, e);
+        else this.onAction?.(id, e);
       });
       return button;
     }));
@@ -377,11 +394,13 @@ export class Panel {
       }, 150);
     }
     // back to the ticker if Claude is still busy
-    if (this.tickerAction) this.setTicker(this.tickerAction);
+    if (this.tickerRows.length) this.setTickers(this.tickerRows);
   }
 
   // Only drop a sticky alert (permission prompt) once it has been dealt with.
   clearKind(kind) {
+    if (this.missed?.kind === kind) this.missed = null; // answered while you were chatting
+    if (kind === 'alert' && this.activity.dataset.error === 'true' && this.activity.dataset.news) this.showActivity(this.tickerAction);
     if (this.current?.kind === kind) this.hide();
   }
 
@@ -435,30 +454,80 @@ export class Panel {
 
   // Ticker: "▸ Modifie  main.js" floating over her head while Claude works.
   // Throttled so a burst of tool calls reads as a flicker of activity, not noise.
+  // One action, no session: the old single ticker (her own commands use it to clear it).
   setTicker(action) {
-    this.tickerAction = action;
+    this.setTickers(action ? [{ key: '_', ...action }] : []);
+  }
+
+  // A plate per busy session, newest first: [{ key, who, verb, target, error, thinking }].
+  // `who` only shows when there's more than one, so a single agent looks like it always did.
+  setTickers(rows) {
+    this.tickerRows = rows.slice(0, TICKER_MAX);
+    this.tickerAction = this.tickerRows[0] || null;
     clearTimeout(this.tickerTimer);
-    if (!action || this.visible) {
+    // talking with her: the activity goes in the chat itself (the newest one)
+    if (this.current?.chat && this.visible) {
+      this.tickerEl.hidden = true;
+      if (this.tickerAction || !this.activity.dataset.news) this.showActivity(this.tickerAction);
+      return;
+    }
+    if (!this.tickerRows.length || this.visible) {
       this.tickerEl.hidden = true;
       return;
     }
     const wait = Math.max(0, 380 - (performance.now() - this.tickerShownAt));
-    this.tickerTimer = setTimeout(() => {
-      // Claude thinking: the seconds counting up don't flash each time, only the first one does
-      const counting = action.thinking && this.tickerEl.dataset.thinking === 'true' && !this.tickerEl.hidden;
-      this.tickerShownAt = performance.now();
-      this.tickerVerb.textContent = action.verb;
-      this.tickerTarget.textContent = action.target || '';
-      this.tickerEl.dataset.error = action.error ? 'true' : 'false';
-      this.tickerEl.dataset.thinking = action.thinking ? 'true' : 'false';
-      this.tickerEl.hidden = false;
-      if (!counting) {
-        this.tickerEl.classList.remove('is-flash');
-        void this.tickerEl.offsetWidth;
-        this.tickerEl.classList.add('is-flash');
+    this.tickerTimer = setTimeout(() => this.renderTickers(), wait);
+  }
+
+  renderTickers() {
+    this.tickerShownAt = performance.now();
+    const rows = this.tickerRows;
+    const many = rows.length > 1;
+    const keep = new Set(rows.map((r) => r.key));
+    for (const [key, plate] of this.tickerPlates) {
+      if (!keep.has(key)) { plate.remove(); this.tickerPlates.delete(key); }
+    }
+    rows.forEach((row, i) => {
+      let plate = this.tickerPlates.get(row.key);
+      if (!plate) {
+        plate = this.tickerTemplate.cloneNode(true);
+        this.tickerPlates.set(row.key, plate);
       }
-      this.place();
-    }, wait);
+      // the seconds of a think counting up don't flash each time; a new action does
+      const text = `${row.verb}\u0000${row.target || ''}`;
+      const changed = plate.dataset.text !== text && !(row.thinking && plate.dataset.thinking === 'true');
+      plate.dataset.text = text;
+      plate.querySelector('.ticker__who').textContent = many && row.who ? row.who : '';
+      plate.querySelector('.ticker__verb').textContent = row.verb;
+      plate.querySelector('.ticker__target').textContent = row.target || '';
+      plate.dataset.error = row.error ? 'true' : 'false';
+      plate.dataset.thinking = row.thinking ? 'true' : 'false';
+      if (this.tickerEl.children[i] !== plate) this.tickerEl.insertBefore(plate, this.tickerEl.children[i] || null);
+      if (changed) {
+        plate.classList.remove('is-flash');
+        void plate.offsetWidth;
+        plate.classList.add('is-flash');
+      }
+    });
+    this.tickerEl.hidden = false;
+    this.place();
+  }
+
+  // The strip in the chat: { who, verb, target, error, thinking, news } or null to hide it.
+  showActivity(a) {
+    if (!a) {
+      this.activity.hidden = true;
+      delete this.activity.dataset.news;
+      return;
+    }
+    this.activityWho.textContent = a.who ? `${a.who} ·` : '';
+    this.activityVerb.textContent = a.verb || '';
+    this.activityTarget.textContent = a.target || '';
+    this.activity.dataset.error = a.error ? 'true' : 'false';
+    this.activity.dataset.thinking = a.thinking ? 'true' : 'false';
+    if (a.news) this.activity.dataset.news = 'true';
+    else delete this.activity.dataset.news;
+    this.activity.hidden = false;
   }
 
   setAnchor(anchor, view) {

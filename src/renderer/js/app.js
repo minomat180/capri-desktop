@@ -7,6 +7,8 @@ import { Brain } from './brain.js';
 import { Guide } from './guide.js';
 import { Mission } from './mission.js';
 import { Chat } from './chat.js';
+import { Pc } from './pc.js';
+import { Reminders, clock } from './reminders.js';
 import { LINES } from './lines.js';
 import { pick, fmt } from './util.js';
 
@@ -55,7 +57,7 @@ async function boot() {
   const panel = new Panel({
     panel: document.getElementById('panel'),
     ticker: document.getElementById('ticker'),
-    labels: LINES[config.lang] || LINES.fr,
+    labels: LINES[config.lang] || LINES.en,
   });
 
   const capri = new Capri({
@@ -174,13 +176,87 @@ async function boot() {
   // Talking to her (chat.js): "Talk to her" in her menu, or the button when you click her idle.
   const chat = new Chat({ capri, panel, voice, host, brain });
   brain.onTalk = () => chat.start();
+  brain.isChatting = () => chat.open;
+
+  // Your PC as she feels it (pc.js): the processor, the battery, the network, a stick, a game.
+  const pc = new Pc({ capri, panel, brain, host, voice, chat, guide });
+  pc.enabled = config.pcReact !== false;
+
+  // Reminders she keeps for you (reminders.js): asked for in her chat, kept in her settings, and
+  // brought up when they're due even if she was off at the time.
+  const SNOOZE_MS = 10 * 60 * 1000;
+  const reminders = new Reminders({ host, list: config.reminders || [] });
+  chat.reminders = reminders;
+  const startedAt = Date.now();
+  const remind = async (r) => {
+    const t = brain.t.remind;
+    const time = clock(r.at, brain.lang);
+    const missed = r.at < startedAt - 60000;
+    const line = missed
+      ? fmt(r.text ? t.missed : t.missedBare, { text: r.text, time })
+      : fmt(pick(r.text ? t.now : t.nowBare), { text: r.text });
+    let answered = false;
+    const onAction = (id) => {
+      answered = true;
+      panel.setActions([]);
+      if (id === 'snooze') {
+        reminders.snooze(r.id, SNOOZE_MS);
+        panel.say({ kind: 'info', face: 'smug', line: t.snoozed, hold: 2500 });
+        return;
+      }
+      reminders.remove(r.id);
+      panel.say({ kind: 'info', face: 'smug', line: pick(t.doneLine), hold: 2500 });
+    };
+    const actions = [{ id: 'done', label: t.done, primary: true }, { id: 'snooze', label: t.snooze }];
+    voice.play('alert');
+    if (capri.stowed) {
+      host.setConfig({ visible: true });
+      await capri.unstow();
+    }
+    capri.wake();
+    capri.perform('hop');
+    const shownAt = performance.now();
+    const shown = panel.say({
+      kind: 'remind', face: 'look', line, quote: missed ? '' : fmt(t.asked, { time }), actions, onAction, hold: null,
+      // closed without an answer: seen, if it was up long enough to read; else back in a couple of minutes
+      onLeave: () => {
+        if (answered) return;
+        if (performance.now() - shownAt > 2500) reminders.remove(r.id);
+        else reminders.snooze(r.id, 2 * 60 * 1000);
+      },
+    });
+    if (!shown) reminders.snooze(r.id, 60 * 1000); // something more important on: in a minute
+  };
+  reminders.onDue = (r) => remind(r).catch((err) => {
+    console.error('[capri] reminder', err);
+    reminders.snooze(r.id, 60 * 1000);
+  });
+
+  // Petted (your pointer back and forth over her mane): she purrs and says something now and then.
+  // Too long and she's had enough: a zap at your pointer.
+  let petTalk = 0;
+  capri.onPet = (phase) => {
+    const t = brain.t.pet;
+    const quiet = !chat.open && (!panel.visible || ['idle', 'info'].includes(panel.current?.kind));
+    if (phase === 'start') {
+      const now = performance.now();
+      if (quiet && now - petTalk > 90000) {
+        petTalk = now;
+        panel.say({ kind: 'info', face: 'smug', line: pick(t.high), hold: 3000 });
+      }
+    } else if (phase === 'enough') {
+      if (quiet) panel.say({ kind: 'info', face: 'many', line: pick(t.enough), hold: 3000 });
+      if (!mouse || !capri.zap(mouse.x, mouse.y)) capri.perform('flinch');
+    }
+  };
   // the first Claude Code event that ever reaches her: so you know it worked
   brain.linked = config.linked;
-  brain.onLinked = () => {
+  brain.onLinked = (agent) => {
     host.setConfig({ linked: true, welcomed: true });
     voice.play('hello');
     capri.perform('hop');
-    panel.say({ kind: 'done', badge: 'LINK', line: brain.t.welcome.linked, hold: 6000 });
+    const name = 'Claude';
+    panel.say({ kind: 'done', badge: 'LINK', line: fmt(brain.t.welcome.linked, { agent: name }), hold: 6000 });
   };
 
   // The demo's second half, after its fake Claude session: everything she does on her own, one
@@ -258,6 +334,68 @@ async function boot() {
   };
 
   host.onClaudeEvent((evt) => brain.handle(evt));
+
+  // Vault approvals (Linux): an agent wants a secret from ipod_vault_use / vault_use. You answer
+  // here or in its terminal, first one wins. One question at a time; the rest wait their turn.
+  if (host.onApproval) {
+    const queue = [];
+    let showing = null;
+    const ta = () => brain.t.approval;
+    const show = () => {
+      if (showing || !queue.length) return;
+      const a = (showing = queue[0]);
+      capri.wake();
+      capri.setMode('alert');
+      voice.play('alert');
+      const agent = a.agent === 'claude' ? 'Claude' : 'An agent';
+      const quote = [
+        `${a.vault === 'ipod' ? 'iPod vault' : 'keyring vault'}: ${a.label}`,
+        a.reason,
+        `$ ${a.command}`,
+        a.cwd && `in ${a.cwd}`,
+      ].filter(Boolean).join('\n');
+      const shown = panel.say({
+        kind: 'alert', sticky: true, badge: ta().badge, tag: a.session || '',
+        line: fmt(ta().line, { agent, label: a.label }), quote, hold: null,
+        actions: [{ id: 'deny', label: ta().deny, primary: true }, { id: 'allow', label: ta().allow }],
+        onAction: (id, e) => {
+          if (showing !== a) return;
+          host.answerApproval(a.id, id === 'allow' ? 'allow' : 'deny', e?.isTrusted === true);
+        },
+        // closed without an answer (clicked away, or replaced): it comes back while it's pending
+        onLeave: () => {
+          if (showing !== a) return;
+          showing = null;
+          setTimeout(show, 1500);
+        },
+      });
+      if (!shown) { showing = null; setTimeout(show, 1500); }
+    };
+    host.onApproval((a) => { queue.push(a); show(); });
+    host.onApprovalResult?.(({ label, exitCode, error }) => {
+      const line = error ? fmt(ta().broke, { label, error })
+        : exitCode === 0 ? fmt(ta().worked, { label })
+          : fmt(ta().failed, { label, code: exitCode ?? '?' });
+      const ok = !error && exitCode === 0;
+      if (ok) capri.perform('hop');
+      panel.say({ kind: ok ? 'done' : 'error', badge: ta().badge, line, hold: ok ? 5000 : 9000 });
+    });
+    host.onApprovalDone(({ id, decision }) => {
+      const i = queue.findIndex((q) => q.id === id);
+      if (i < 0) return;
+      const [a] = queue.splice(i, 1);
+      if (showing === a) {
+        showing = null;
+        if (capri.mode === 'alert') capri.setMode('idle');
+        const line = { allow: ta().allowed, deny: ta().denied, withdrawn: ta().elsewhere, expired: ta().expired }[decision] || ta().elsewhere;
+        if (panel.current?.sticky) panel.current.sticky = false; // answered: it may go now
+        panel.hide();
+        // released: she stays on it until the command reports back (or a minute passes)
+        setTimeout(() => panel.say({ kind: 'info', badge: ta().badge, line: fmt(line, { label: a.label }), hold: decision === 'allow' ? 60000 : 3500 }), 250);
+      }
+      setTimeout(show, queue.length ? 900 : 0);
+    });
+  }
   host.onWindows((data) => {
     capri.setWindows(data);
     brain.onWindows(data);
@@ -277,13 +415,15 @@ async function boot() {
   });
 
   host.onConfig((cfg) => {
+    if (cfg.reminders) reminders.sync(cfg.reminders);
+    if ('pcReact' in cfg) pc.enabled = cfg.pcReact !== false; // one may have been cancelled elsewhere
     voice.configure(cfg);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;
     if (cfg.scale !== capri.scale) capri.setScale(cfg.scale);
     if (cfg.lang !== brain.lang) {
       brain.lang = cfg.lang;
-      panel.labels = LINES[cfg.lang] || LINES.fr;
+      panel.labels = LINES[cfg.lang] || LINES.en;
       document.documentElement.lang = cfg.lang;
     }
   });
