@@ -23,11 +23,11 @@ const DEFAULTS = {
   linked: false,
   chatBackend: 'claude', // 'claude': `claude -p` with Claude Code's login; 'ollama': ollamaHost below
   claudeModel: 'haiku', // small and quick: she chats, she doesn't code
-  spotifyClientId: '314167130a8b43a18fed103b9261f311', // mino's dev app "glass-player"; secret in the keyring
+  spotifyClientId: '314167130a8b43a18fed103b9261f311', // the author's Spotify developer app; use your own id, the secret comes from the keyring
   pcReact: true,       // she reacts to this PC (pc.js): cpu, battery, network, usb, games
   reminders: [],       // the ones she keeps for you (reminders.js)
   chatModel: null,     // the Ollama model (null: the first one installed)
-  ollamaHost: '127.0.0.1:11434', // minomat over Thunderbolt
+  ollamaHost: '127.0.0.1:11434', // Ollama's default address
 };
 
 let cache = null;

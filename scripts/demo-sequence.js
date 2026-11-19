@@ -5,7 +5,7 @@
 // [delay before sending (ms), event].
 
 const SESSION = 'demo-session';
-const CWD = '/home/mino/Projects/night-city-api';
+const CWD = '/home/you/projects/night-city-api';
 
 // demo: not a real Claude Code event (she doesn't count it as her first contact)
 const base = (name, extra = {}) => ({ hook_event_name: name, session_id: SESSION, cwd: CWD, demo: true, ...extra });

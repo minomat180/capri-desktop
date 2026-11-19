@@ -1,9 +1,9 @@
 {
   "name": "capri-desktop",
   "version": "0.3.1",
-  "description": "Capri, the Project Capricorn construct, living on your desktop and narrating what Claude Code is doing.",
+  "description": "Capri, the desktop companion who narrates what Claude Code is doing, ported to Linux (Wayland, mango) and macOS.",
   "author": "mochiiwuff",
-  "repository": "github:mochiiwuff/capri-desktop",
+  "repository": "github:minomat180/capri-desktop",
   "main": "src/main/main.js",
   "private": true,
   "scripts": {
@@ -21,7 +21,7 @@
     "cyberpunk",
     "edgerunners"
   ],
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=20"
   },
@@ -64,5 +64,8 @@
   "optionalDependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0"
-  }
+  },
+  "contributors": [
+    "minomat180 (Linux and macOS ports)"
+  ]
 }

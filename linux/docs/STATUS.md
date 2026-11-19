@@ -1,13 +1,14 @@
-# Capri (Linux/mango port) — status, decisions, and the other Capri projects
+# Capri (Linux and macOS ports): status, decisions, and the other Capri projects
 
 Working notes for this fork. Update when something lands, is decided, or is dropped.
-Last updated: 2026-11-04.
+Last updated: 2026-11-19.
 
-- **Our repo:** `~/Projects/capri-desktop`, private at `github.com/minomat180/capri-desktop`.
-  `origin` = ours (push here), `upstream` = `mochiiwuff/capri-desktop` (read-only, push disabled).
-- **Branch:** `feature/linux-port` is the working trunk. New work gets its own `feature/<topic>`.
-- **Run:** started by mango's autostart; `capri-ctl {show|hide|stow|chat|menu|quit|...}`,
-  logs `~/.local/state/capri/capri.log`, config `~/.config/capri/config.json`.
+- **Repo:** `github.com/minomat180/capri-desktop`, a fork of `mochiiwuff/capri-desktop`.
+- **Branch:** `main` holds both ports. New work gets its own `feature/<topic>` branch; local
+  text-to-speech is on `feature/voice`, not merged.
+- **Run:** Linux: started by mango's autostart. macOS: `macos/README.md`. Both:
+  `capri-ctl {show|hide|stow|chat|menu|quit|...}`, logs `~/.local/state/capri/capri.log`, config
+  `~/.config/capri/config.json`.
 - **Design rule:** the upstream renderer (`src/renderer/`) stays as close to upstream as possible
   so merges keep working. Linux-specific code lives in `linux/`.
 
@@ -52,26 +53,28 @@ Mino's call (2026-11-04) on upstream's newer features:
 - `system.js` — Windows-only PC control (settings, power, snip). Would be a full rewrite; not asked for.
 
 **On hold / open**
-- **Voice (TTS)** — researched, nothing built. See "Voice" below. Worth trying on a branch.
+- **Voice (TTS)**: built on `feature/voice` (Linux: Piper, then Kokoro `af_heart`, cached per
+  line). Not merged into `main`; not on macOS.
 - Upstream merge — 67 commits ahead of our base (`79a016c`). Not merged. Conflicts expected in
   `lines.js`, `brain.js`, `chat.js` (we changed them a lot: English-only, `{agent}` placeholder).
-- **Upstream relicensed** to PolyForm Noncommercial (was NOASSERTION/MIT-ish for code). Check before
-  taking new upstream code if this fork is ever published. Art was never MIT.
+- **License:** upstream relicensed to PolyForm Noncommercial at 0.4.4. The ported features (pet,
+  reminders, feels your PC) come from after that, so the fork as a whole is under PolyForm
+  Noncommercial too (`LICENSE`). Art was never under the code's license.
 - Hide while a window is fullscreen (capri-mate does it; mango reports fullscreen).
 - Waybar module showing her status.
 - Guide topics still describe Windows Explorer/tray in places.
 
-## Voice (TTS) — researched 2026-11-04, not built
+## Voice (TTS): researched 2026-11-04 (since built on `feature/voice`)
 
 - **Recommended:** Piper, local, CPU. Now at `OHF-Voice/piper1-gpl` (the old `rhasspy/piper` is
   archived), **GPL-3.0**, `pip install piper-tts`, ~60 MB per voice.
-  **Measured on this T480:** ~0.1–0.2 s per line *if the model stays loaded*; a cold CLI call is ~3 s,
+  **Measured on a ThinkPad T480:** ~0.1–0.2 s per line *if the model stays loaded*; a cold CLI call is ~3 s,
   so it must run as one long-lived process, never spawn-per-line.
 - **Upgrade if too flat:** Kokoro-82M (`hexgrad/kokoro`, Apache-2.0, ~330 MB, better quality,
   younger-sounding female voices). CPU latency on this machine **unmeasured**.
 - **Cloud:** ElevenLabs free tier 10k credits/month (plenty for short lines), best quality, needs an
   account. OpenAI TTS ~$0.015/min.
-- **Not worth it:** GPU TTS on minomat — only reachable when the Thunderbolt cable is in, so it needs
+- **Not worth it:** GPU TTS on the desktop machine: only reachable when the Thunderbolt cable is in, so it needs
   a fallback anyway. Voice cloning of the real VA is off the table (legal/ethical).
 - **Integration shape:** daemon keeps a warm TTS process → WAV in `/tmp` → served by the existing
   static server (`.wav` MIME already mapped in `linux/daemon/main.js`) → renderer fetches and plays it
@@ -102,4 +105,3 @@ Nobody else has a Wayland port or vault approvals.
 ## Related files
 
 - `linux/docs/vault-approvals.md` — Capri's approval API for secrets, and what was learned wiring it to T3 Code.
-- `~/vault/AGENTS.md` and `~/vault/projects/capri-desktop.md` — machine-wide rules and this project's note.

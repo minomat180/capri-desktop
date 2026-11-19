@@ -2,7 +2,7 @@
 # cpu-sample.sh SECONDS: CPU% per process of interest, and package power (RAPL), over SECONDS.
 secs=${1:-20}
 hz=$(getconf CLK_TCK)
-pids=$(pgrep -d ' ' -f 'mango$|^mango |spike_shell.py|capri-shell|WebKitWebProcess|WebKitNetworkProcess|WebKitGPUProcess|capri-daemon')
+pids=$(pgrep -d ' ' -f 'mango$|^mango |capri-shell|WebKitWebProcess|WebKitNetworkProcess|WebKitGPUProcess|capri-daemon')
 rapl=/sys/class/powercap/intel-rapl:0/energy_uj
 ticks() { for p in $pids; do [ -r /proc/$p/stat ] && awk -v p=$p '{print p, $14+$15}' /proc/$p/stat; done; }
 e0=$(sudo cat $rapl 2>/dev/null)
