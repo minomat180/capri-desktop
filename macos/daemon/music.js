@@ -2,7 +2,7 @@
 
 // Finding music and playing it in Spotify on a Mac. Finding is linux/daemon/music.js as it is
 // (Spotify's Web API); the two things that differ are here:
-//  - the app's client secret comes from pi-vault's keychain entry, which asks for Touch ID. Once
+//  - the app's client secret comes from agent-vault's keychain entry, which asks for Touch ID. Once
 //    per run of the service: it's kept in memory after that, never written anywhere.
 //  - playing: the overlay app tells Spotify to play the link (and opens Spotify first if needed).
 
@@ -13,7 +13,7 @@ const { execFile, spawn } = require('node:child_process');
 const base = require('../../linux/daemon/music');
 const native = require('./native');
 
-const VAULT = process.env.CAPRI_VAULT_BIN || path.join(os.homedir(), '.pi/agent/bin/pi-vault');
+const VAULT = process.env.CAPRI_VAULT_BIN || path.join(os.homedir(), '.local/bin/agent-vault');
 let secret = null;
 let asking = null;
 

@@ -1,72 +1,48 @@
-# Vault approvals: how pi, T3 Code and Capri connect
+# Vault approvals: Capri's side
 
-Worked out 2026-10-26 from the sources (pi 1.4.0 `dist/modes/rpc/rpc-mode.js`, T3 Code's
-`apps/server/dist/binCli-*.mjs` pi driver), Capri's log, the vault audit logs and pi's session
-logs. Read this before changing anything in the approval path.
+Capri can show a secret request ("an agent wants X") with Deny / Release it, and pass the
+answer back to whoever asked. Until 2026-11-19 the askers were two vault extensions of the pi
+coding agent (`vault_use`, `ipod_vault_use`). mino now uses only Claude Code, and those
+extensions were removed, so **nothing calls this API at the moment**. The service side is kept
+because it is small, safe, and the natural place for a Claude Code secret tool to ask later.
+Read this before wiring anything to it.
 
-## The path
+## The API (127.0.0.1:47823, `linux/daemon/main.js`)
 
 ```
-ipod_vault_use / vault_use  (pi extension, runs inside the pi process)
-  └─ approve()  (capri-approval.ts, copied into both vault extensions)
-       ├─ ctx.ui.select(title, [deny, allow], {signal})
-       │    ├─ pi in a terminal (tmux): the TUI dialog
-       │    └─ pi under T3: RPC mode → stdout `extension_ui_request` → T3 → question card
-       │         answer: T3 → stdin `extension_ui_response {id, value}` → select resolves
-       └─ Capri: POST 127.0.0.1:47823/approval  → her panel (Deny / Release it)
-            answer: real click → WebKit → capri-shell.py → fd 3 pipe → daemon
-            (never HTTP: an agent can't approve itself with curl)
-            pi side long-polls GET /approval/<id>
+POST /approval {label, vault, reason, command, cwd, agent, session} -> { id }   her panel asks
+                                                       (503 when the overlay is not up)
+GET  /approval/<id>          long poll                -> the decision (allow | deny | expired)
+DELETE /approval/<id>        withdraw: answered elsewhere
+POST /approval/<id>/result   {exitCode, error}        she says "done" or "failed (exit N)"
 ```
 
-First answer wins.
+The answer only ever comes from a real click: WebKit -> `capri-shell.py` -> the overlay's
+private fd 3 pipe -> the service. Never over HTTP, so an agent cannot approve itself with curl.
+Requests expire after 10 minutes. Requests and results with an `Origin` header (browsers) are refused. First answer wins when the asker also shows its own dialog.
 
-## What went wrong ("accept works only sometimes")
+## Lessons from the T3 Code wiring (2026-10-26 to 2026-11-12)
 
-1. **Dead T3 cards.** Aborting `select` under RPC only drops the request on pi's side. pi sends
-   no cancel to T3, and T3 has no handler for one anyway. T3 only clears a card when you answer
-   it, when it times out, or at the end of the turn. So after a Capri click, T3 kept showing the
-   question. Clicking it there did nothing (pi had forgotten the id), but T3 showed it as
-   answered. **Fix:** under T3, the Capri answer is submitted *through T3*
-   (on the own thread, via `T3_MCP_URL` + `T3_MCP_BEARER_TOKEN` that T3 gives every pi it
-   starts). T3 closes the card properly, and pi gets the value through the normal path. If that
-   fails, we abort the dialog and post a notice into the T3 thread saying the card is stale.
-   **Tool rename (seen 2026-11-11):** T3 folded `t3_pending_request_{list,read,respond}` into one
-   `t3_pending_request` tool taking `action: list|read|respond`; the old names now return
-   "Tool not found". That silently broke the close-the-card path (the card then sat there until
-   the turn ended and T3 cancelled it). `capri-approval.ts` now tries the new single-tool shape
-   first and falls back to the three old names, so it works on both. If stale cards ever come
-   back, check the tool names first: `tools/list` on `$T3_MCP_URL`.
-   **Second cause, same symptom (2026-11-12):** T3 does not carry our dialog title through. Every
-   card reads back with `header: "Question"`, so matching on `q.header === title` never matched
-   and the card was left to go stale even once the tool name was right. We now match on the two
-   option values alone, which embed the secret's name. Checked live: both stale cards matched and
-   closed. If this breaks again, `read` a pending card and look at what `header` and `options`
-   actually contain before trusting either.
-2. **"Released" then 20–35 s of silence, then a failure.** Every Capri approval on 2026-10-26
-   went through, but the command after it (`browser-login`) failed in 4 of 6 runs: exit 127
-   (broken symlink) twice, then `selector never appeared` (15 s wait plus 3.5 s settle). From
-   the desk this looked like the approval hadn't worked. **Fix:** after the run, the extension
-   reports the exit code (`POST /approval/<id>/result`). Capri says "Running it…" until then,
-   then either "done" or "failed (exit N), details in pi".
-3. **Old sessions.** pi loads extensions at start. Sessions started before an extension change
-   keep the old code (the 13:16–13:20 UTC approvals had no `via` and never reached Capri).
-   Restart pi sessions after changing the vault extensions.
-4. **Capri restarting mid-question** (old code): the request 404'd and the poll loop spun with
-   no delay. **Fix:** on 404 or a lost connection, ask again (with a pause), so the question
-   reappears on the restarted Capri.
+These came from the pi version but apply to any asker running under T3 Code:
+
+1. **Dead T3 cards.** If the asker also shows a T3 question card and the answer comes from Capri,
+   the card stays open until the turn ends unless the asker closes it through T3 (its MCP
+   server, `t3_pending_request` with `action: respond`). Match the card on its option values:
+   T3 rewrites every card's header to "Question".
+2. **"Released" then silence.** Report the command's exit code back
+   (`POST /approval/<id>/result`), or a failure after a successful approval looks like the
+   approval did not work.
+3. **Capri restarting mid-question.** On a 404 or a lost connection, ask again after a pause, so
+   the question reappears on the restarted Capri.
 
 ## Known gap (T3, not Capri)
 
-`t3_pending_request_respond` answers any `user_input` card, and T3 files pi's `select` dialogs
-as `user_input` (only `confirm` counts as a permission request). T3's write check also skips
-the caller's own thread, and T3 explicitly tells parent agents to answer their child threads'
-questions with this tool. So **an orchestrating agent can approve a delegated child's vault
-use**, with no human involved. The approve() helper uses the same tool, but only to pass on
-*your* Capri click.
+T3's `t3_pending_request` answers any `user_input` card, its write check skips the caller's own
+thread, and T3 tells parent agents to answer their child threads' questions. So an orchestrating
+agent could approve a delegated child's secret request in T3 with no human involved. Capri's
+click-only path does not have this gap.
 
 ## Where to look
 
 - Capri: `~/.local/state/capri/capri.log` (`approval asked / allow via capri / outcome`)
-- Vaults: `~/.local/state/{ipod-vault,pi-vault}/audit.log` (`via`: terminal | t3 | capri)
 - T3: `~/.t3/userdata/statev2.sqlite`, table `orchestration_v2_projection_runtime_requests`

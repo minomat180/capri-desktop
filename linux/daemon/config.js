@@ -21,8 +21,8 @@ const DEFAULTS = {
   visible: true,
   welcomed: false,
   linked: false,
-  chatBackend: 'pi',   // 'pi': any model pi has, with pi's logins; 'ollama': ollamaHost below
-  piModel: 'anthropic/claude-haiku-4-5', // small and quick: she chats, she doesn't code
+  chatBackend: 'claude', // 'claude': `claude -p` with Claude Code's login; 'ollama': ollamaHost below
+  claudeModel: 'haiku', // small and quick: she chats, she doesn't code
   spotifyClientId: '314167130a8b43a18fed103b9261f311', // mino's dev app "glass-player"; secret in the keyring
   pcReact: true,       // she reacts to this PC (pc.js): cpu, battery, network, usb, games
   reminders: [],       // the ones she keeps for you (reminders.js)

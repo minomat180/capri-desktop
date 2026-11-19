@@ -16,7 +16,7 @@ case "${1:-status}" in
     node=$(command -v node) || { echo "capri-login: node is not on your PATH" >&2; exit 1; }
     [ -x "$root/macos/shell/Capri.app/Contents/MacOS/capri-shell" ] || "$root/macos/shell/build.sh"
     mkdir -p "$HOME/Library/LaunchAgents"
-    # launchd starts with a bare PATH: node, and pi for her chat, have to be on it
+    # launchd starts with a bare PATH: node, and claude for her chat, have to be on it
     cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -26,7 +26,7 @@ case "${1:-status}" in
   <key>ProgramArguments</key>
   <array><string>/bin/sh</string><string>$root/linux/bin/capri</string></array>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>$(dirname "$node"):$HOME/.pi/agent/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <dict><key>PATH</key><string>$(dirname "$node"):$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ThrottleInterval</key><integer>10</integer>

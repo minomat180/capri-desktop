@@ -57,7 +57,7 @@ list of apps she can open; the others (iTerm, Ghostty...) she still opens by nam
 | Start at login | mango's autostart | a LaunchAgent (`macos/bin/capri-login`) |
 | The demo's terminal | a `foot` window | her own terminal window, with canned text |
 | "Open a terminal" | whichever terminal is installed | her own: xterm.js in a window of the overlay app, your shell on a pty |
-| Spotify search secret | gnome-keyring | pi-vault's keychain entry: Touch ID once per run of the service |
+| Spotify search secret | gnome-keyring (service `agent-vault`) | agent-vault's keychain entry (`~/.local/bin/agent-vault`): Touch ID once per run of the service |
 | Which window an agent is in | `/proc` | one `ps`, remembered per agent |
 
 The overlay app and the service talk over pipes (see the top of `main.swift`). Vault approvals

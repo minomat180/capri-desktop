@@ -37,15 +37,15 @@ export const LINES = {
     subagentStart: ['Subagent {agent} deployed.'],
     subagentStop: ['Subagent {agent} is back.'],
     compact: ['Compressing our memories…', 'Too much memory. Tidying up.'],
-    // a vault extension wants a secret: you approve or deny it here (or in the terminal)
+    // an agent wants a secret: you approve or deny it here (or where the agent asked)
     approval: {
       line: '{agent} wants a secret: “{label}”.',
       badge: 'VAULT',
       allow: 'Release it', deny: 'Deny',
       allowed: 'Released “{label}”. Running it…', denied: 'Denied. “{label}” stays locked.',
-      elsewhere: 'Answered in pi.', expired: 'That request timed out.',
+      elsewhere: 'Answered elsewhere.', expired: 'That request timed out.',
       worked: '“{label}”: done, it went through.',
-      failed: 'Released “{label}”, but the command failed (exit {code}). The details are in pi.',
+      failed: 'Released “{label}”, but the command failed (exit {code}). The details are with the agent.',
       broke: 'Couldn’t use “{label}”: {error}',
     },
     // talking to her (chat.js): a local model through Ollama; replies and voice are AI-generated, and she says so
@@ -60,8 +60,8 @@ export const LINES = {
       offlineHow: 'I talk through Ollama on minomat ({host}). Plug in the Thunderbolt cable and make sure Ollama is running there, then try again.',
       noModel: 'Ollama on minomat has no model yet.',
       noModelHow: 'On minomat: ollama pull qwen3:8b. Then talk to me again.',
-      noPi: 'I can’t find pi on this PC.',
-      noPiHow: 'I talk through pi (~/.pi/agent/bin/pi). Once it’s back, talk to me again.',
+      noClaude: 'I can’t find Claude Code on this PC.',
+      noClaudeHow: 'I talk through Claude Code (the claude command). Once it’s back, talk to me again.',
       ok: 'Got it',
       failed: 'Lost the signal:',
       loading: 'Waking the model up… the first answer takes a moment.',
@@ -152,7 +152,7 @@ export const LINES = {
     },
     welcome: {
       hi: 'Hey, I’m Capri.',
-      about: 'I live on your desktop and react to what Claude Code and Pi do on this PC. Pi’s already wired in. Without either, I just hang out here, and that’s fine too.',
+      about: 'I live on your desktop and react to what Claude Code does on this PC. Without it, I just hang out here, and that’s fine too.',
       connect: 'Want me to plug into Claude Code? One click, then close Claude Code completely and open it again.',
       noClaude: 'I can’t find Claude Code on this PC (it needs a Claude subscription). Without it, I’ll just hang out and live my life.',
       menu: 'Right-click me for my menu. Super+C tucks me away.',
@@ -226,13 +226,6 @@ export const LINES = {
       Bash: 'Runs', PowerShell: 'Runs', Grep: 'Greps', Glob: 'Scans', WebFetch: 'Fetches',
       WebSearch: 'Searches', Agent: 'Delegates', Task: 'Delegates', TodoWrite: 'Plans', Skill: 'Loads',
       AskUserQuestion: 'Asks', ExitPlanMode: 'Proposes',
-      // pi's own tools (lower-case) and this setup's
-      read: 'Reads', write: 'Writes', edit: 'Edits', bash: 'Runs', powershell: 'Runs', grep: 'Greps',
-      find: 'Scans', ls: 'Lists', agent_browser: 'Browses', agent_browser_code: 'Browses',
-      agent_browser_action: 'Browses', agent_browser_qa: 'Checks', agent_browser_tools: 'Loads',
-      vault_use: 'Unlocks', ipod_vault_use: 'Unlocks', vault_list: 'Lists', ipod_vault_list: 'Lists',
-      spawn_agent: 'Delegates', delegate_task: 'Delegates', task_status: 'Checks', local_delegate: 'Asks',
-      session_control: 'Tunes', tool_search: 'Searches', mcp: 'Calls',
       default: 'Uses',
     },
   },

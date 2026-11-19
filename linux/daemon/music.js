@@ -6,7 +6,7 @@
 // `playerctl -p spotify open spotify:track:<id>` (or :playlist:/:album:) starts it.
 // Finding: Spotify's Web API search, with mino's own developer app "glass-player" (client
 // credentials: it can search the public catalog, nothing about his account). Client ID is in
-// config (spotifyClientId), the secret in the keyring (pi-vault, SPOTIFY_CLIENT_SECRET), read
+// config (spotifyClientId), the secret in the keyring (agent-vault, SPOTIFY_CLIENT_SECRET), read
 // with secret-tool, never written anywhere else. Since Feb 2026 dev-mode apps need the owner to
 // have Premium and return at most 10 results per search.
 // Fallback when the API can't be used: a web search restricted to open.spotify.com/track pages
@@ -72,7 +72,7 @@ let token = null; // { value, until }
 
 // where the app's client secret comes from (macos/daemon/music.js swaps this for the keychain)
 const secrets = {
-  read: () => run('secret-tool', ['lookup', 'service', 'pi-vault', 'account', 'SPOTIFY_CLIENT_SECRET'], 5000),
+  read: () => run('secret-tool', ['lookup', 'service', 'agent-vault', 'account', 'SPOTIFY_CLIENT_SECRET'], 5000),
 };
 
 async function apiToken() {
