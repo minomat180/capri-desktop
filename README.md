@@ -7,7 +7,7 @@
 
 # capri-desktop
 
-### Claude Code's desktop companion, ported to macOS and Linux
+### A desktop companion for Claude Code, on macOS and Linux
 
 **Capri sits on your screen, watches Claude Code work and tells you what it is doing.**
 
@@ -15,7 +15,6 @@
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-db61a2?style=flat-square&logo=apple&logoColor=white)](#platforms)
 [![Linux: Wayland, mango](https://img.shields.io/badge/Linux-Wayland%2C%20mango-db61a2?style=flat-square&logo=linux&logoColor=white)](#platforms)
 [![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-db61a2?style=flat-square&logo=nodedotjs&logoColor=white)](#quick-start)
-[![Works with Claude Code](https://img.shields.io/badge/works_with-Claude_Code-db61a2?style=flat-square&logo=claude&logoColor=white)](https://code.claude.com/docs/en/quickstart)
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Layout](#layout) · [Status and limits](#status-and-limits) · [Credits](#credits-and-license) · [Upstream](https://github.com/mochiiwuff/capri-desktop)
 
@@ -54,8 +53,8 @@ installer and its full feature list, go to [upstream](https://github.com/mochiiw
 
 | Platform | Requires | Overlay |
 |:--|:--|:--|
-| <img src="https://api.iconify.design/mdi/apple.svg?color=%238B949E" width="16" height="16">&nbsp;**macOS** | `13+`, Xcode command line tools | `NSPanel` + `WKWebView` (Swift) |
-| <img src="https://api.iconify.design/mdi/linux.svg?color=%238B949E" width="16" height="16">&nbsp;**Linux** | mango `0.15+`, GTK 4, gtk4-layer-shell, WebKitGTK `6.0` | wlr-layer-shell surface + WebKitGTK (Python) |
+| <img src="https://api.iconify.design/mdi/apple.svg?color=%238B949E" width="16" height="16">&nbsp;**macOS** | `13+`, Xcode command line tools (to build the overlay) | `NSPanel` + `WKWebView` (Swift) |
+| <img src="https://api.iconify.design/mdi/linux.svg?color=%238B949E" width="16" height="16">&nbsp;**Linux** | [mango](https://github.com/mangowm/mango) `0.15+`, GTK 4, gtk4-layer-shell, WebKitGTK `6.0` | wlr-layer-shell surface + WebKitGTK (Python) |
 
 Both need Node `20+` and [Claude Code](https://code.claude.com/docs/en/quickstart), installed and
 logged in.
@@ -179,7 +178,7 @@ Capri, her art and the original app: [mochiiwuff/capri-desktop](https://github.c
 The Linux and macOS ports: [minomat180](https://github.com/minomat180).
 
 Capri / Project Capricorn, Cyberpunk and Cyberpunk: Edgerunners belong to CD PROJEKT RED, Studio
-Trigger and Netflix. This is a non-commercial fan project with no affiliation. Her character art
+Trigger and Netflix. This is a non-commercial fan project with no affiliation to any of them or to Anthropic. Her character art
 (frames of the show, a fan-made cut-out and fan art) belongs to its owners: it is **not** in this
 repository and not covered by its license. `scripts/fetch-art.js` fetches it from upstream, where
 it is published. The two screenshots in `docs/` show the art as the app draws it. If a rights
