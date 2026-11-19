@@ -10,8 +10,10 @@ through Claude Code. For the original Windows app, its installer and its full fe
 [upstream](https://github.com/mochiiwuff/capri-desktop).
 
 <p align="center">
-  <img src="docs/capri-macos.png" alt="Capri on a Mac, with an activity plate over her head while Claude Code works" width="720">
+  <img src="docs/capri-macos-greeting.png" alt="Capri on macOS as a Claude Code session starts: 'All of me is awake. Watching night-city-api.'" width="49%">
+  <img src="docs/capri-macos-activity.png" alt="Capri on macOS while Claude Code works: her panel shows the prompt and the tool calls so far" width="49%">
 </p>
+<p align="center"><sub>The macOS port running upstream's scripted demo session (<code>capri-ctl demo</code>): a session starts, then the prompt and Claude's first tool calls.</sub></p>
 
 ## What she does
 
