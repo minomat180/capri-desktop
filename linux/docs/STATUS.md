@@ -17,14 +17,14 @@ Last updated: 2026-11-04.
 |---|---|
 | Overlay | GTK4 layer-shell + WebKitGTK, real partial click-through, no focus steal, SUPER+C to stow |
 | Grab | hit test on her outline grown 18 px (`GRAB_SCREEN_PX` in `src/renderer/js/capri.js`) |
-| Agents | Claude Code (hook) and pi (extension, `linux/pi-extension/`); subagent/T3 sessions included |
+| Agents | Claude Code (hook, `hooks/capri-hook.js`); subagent/T3 sessions included |
 | Activity | one plate per busy agent above her head, max 3 (`TICKER_MAX` in `panel.js`), red on failure |
-| Chat | through `pi -p` (Claude Haiku by default, `piModel` in config), or Ollama (`chatBackend`) |
+| Chat | through `claude -p` (`linux/daemon/claude-chat.js`; Haiku by default, `claudeModel` in config), or Ollama (`chatBackend`) |
 | Chat while busy | works: agent activity shows as a strip inside the chat, she stays put |
 | Apps | open any installed `.desktop` app; close an open one after your click |
 | Music | Spotify: skip/back/pause/resume; play a song or playlist by name; "search X" lists hits |
 | Spotify search | Web API, dev app `glass-player` (id in config, secret in keyring `SPOTIFY_CLIENT_SECRET`); falls back to a DuckDuckGo site: search |
-| Vault approvals | `ipod_vault_use` / `vault_use` prompts appear on Capri too; click-only, via the overlay's private pipe; answered through T3 when under T3 (see `vault-approvals.md`) |
+| Vault approvals | the `/approval` API is still in the service (click-only, via the overlay's private pipe), but no agent tool calls it since the pi extensions were removed on 2026-11-19 (see `vault-approvals.md`) |
 | Language | English only (other 4 locales stripped) |
 
 ## Decided: wanted / not wanted
@@ -39,7 +39,7 @@ Mino's call (2026-11-04) on upstream's newer features:
   across BAT0+BAT1, /sys/class/net, lsblk, /sys/bus/usb, mango for a fullscreen game) polled every
   4 s; renderer `src/renderer/js/pc.js` rewritten for it. Off via config `pcReact`.
 - [ ] **Looks at your screen** — needs a Wayland grab (`grim`) and a vision-capable chat path
-  (our chat is `pi -p`, text only today). Not started.
+  (our chat is `claude -p`, text only today). Not started.
 - [ ] **Find your files** — Windows-index based upstream; needs a Linux rewrite (`fd`/`plocate`).
   Not started.
 
@@ -48,7 +48,7 @@ Mino's call (2026-11-04) on upstream's newer features:
   `pc.js`, `look.js`, `reminders.js`, `files.js` do not reference bond, so they can be taken without it.)
 - `custom.js` — "make her yours" (nickname, custom persona lines). Not interesting.
 - Codex / Antigravity support — not needed.
-- Upstream's LLM layer (`llm.js`, Gemini, Ollama cloud) — we have our own (`pi-chat.js`).
+- Upstream's LLM layer (`llm.js`, Gemini, Ollama cloud) — we have our own (`claude-chat.js`).
 - `system.js` — Windows-only PC control (settings, power, snip). Would be a full rewrite; not asked for.
 
 **On hold / open**
@@ -97,9 +97,9 @@ for the survey were under `/tmp/capri-cmp` (deleted; re-clone if needed).
 | **llymemg00/-Capri-voice-** (fork) | — | `ear.js`: hotkey speech-to-text into her chat |
 | **ChannelCooperStart/capri-ai** (170★) | — | **AVOID: almost certainly malware.** README only, no source, pushes a `Capri-Setup.exe` and tells you to click past the Windows warning. Star count looks bought |
 
-Nobody else has a Wayland port, pi support, or vault approvals.
+Nobody else has a Wayland port or vault approvals.
 
 ## Related files
 
-- `linux/docs/vault-approvals.md` — how pi, T3 Code and Capri connect for secret approvals.
-- `~/.pi/agent/AGENTS.md` — machine-wide notes (mango, pi-browser, vaults).
+- `linux/docs/vault-approvals.md` — Capri's approval API for secrets, and what was learned wiring it to T3 Code.
+- `~/vault/AGENTS.md` and `~/vault/projects/capri-desktop.md` — machine-wide rules and this project's note.

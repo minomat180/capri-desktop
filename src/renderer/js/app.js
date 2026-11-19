@@ -255,7 +255,7 @@ async function boot() {
     host.setConfig({ linked: true, welcomed: true });
     voice.play('hello');
     capri.perform('hop');
-    const name = agent === 'pi' ? 'Pi' : 'Claude';
+    const name = 'Claude';
     panel.say({ kind: 'done', badge: 'LINK', line: fmt(brain.t.welcome.linked, { agent: name }), hold: 6000 });
   };
 
@@ -347,7 +347,7 @@ async function boot() {
       capri.wake();
       capri.setMode('alert');
       voice.play('alert');
-      const agent = a.agent === 'claude' ? 'Claude' : a.agent === 'pi' ? 'Pi' : 'An agent';
+      const agent = a.agent === 'claude' ? 'Claude' : 'An agent';
       const quote = [
         `${a.vault === 'ipod' ? 'iPod vault' : 'keyring vault'}: ${a.label}`,
         a.reason,
