@@ -1,0 +1,12 @@
+#!/bin/sh
+# Start Capri (the service, which runs the overlay). Logs: ~/.local/state/capri/capri.log
+# Usage: capri [--dev] [--no-shell] [--foreground]   (stop it: capri-ctl quit)
+# --foreground: log to this terminal instead of the file.
+root=$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)
+state=${XDG_STATE_HOME:-$HOME/.local/state}/capri
+mkdir -p "$state"
+unset ELECTRON_RUN_AS_NODE
+for a in "$@"; do
+  if [ "$a" = "--foreground" ]; then exec node "$root/linux/daemon/main.js" "$@"; fi
+done
+exec node "$root/linux/daemon/main.js" "$@" >> "$state/capri.log" 2>&1

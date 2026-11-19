@@ -314,6 +314,16 @@ body {
   overflow: hidden;
 }
 
+/* a vault approval: wider, and every line of it readable (you're about to release a secret) */
+.panel.is-sticky { width: clamp(340px, 30vw, 520px); }
+.panel.is-sticky .panel__quote {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
 /* Claude's whole answer, when you weren't on its window to read it: wider panel, scrolls */
 .panel.has-reply {
   width: clamp(340px, 30vw, 520px);
@@ -643,6 +653,40 @@ body {
   scrollbar-color: var(--violet) transparent;
 }
 
+/* what the agents are up to, while you talk to her: the ticker, folded into the chat */
+.panel__activity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin: 10px 0 0;
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border-left: 2px solid var(--green);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.panel__activity[hidden] { display: none; }
+.panel__activity-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--green);
+  animation: blink 700ms steps(2, jump-none) infinite;
+}
+.panel__activity-who { flex: none; color: var(--paper-3); }
+.panel__activity-who:empty { display: none; }
+.panel__activity-verb { flex: none; color: var(--green); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+.panel__activity-target { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--paper-2); }
+.panel__activity[data-error='true'] { border-left-color: var(--red); }
+.panel__activity[data-error='true'] .panel__activity-dot { background: var(--red); }
+.panel__activity[data-thinking='true'] .panel__activity-dot { background: var(--violet); animation-duration: 1400ms; }
+.panel__activity[data-thinking='true'] .panel__activity-verb { color: var(--paper); }
+.panel__activity[data-news='true'] { border-left-color: var(--violet); }
+.panel__activity[data-news='true'] .panel__activity-dot { background: var(--violet); animation: none; }
+
 /* her answer coming in: a block cursor at its end, on twos */
 .panel__line.is-streaming::after {
   content: '▌';
@@ -743,9 +787,24 @@ body {
   left: 0;
   top: 0;
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
   filter: drop-shadow(3px 3px 0 var(--violet));
   will-change: transform;
 }
+.ticker[hidden] { display: none; }
+
+/* several agents at once: whose plate this is */
+.ticker__who {
+  flex: none;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--paper-3);
+}
+.ticker__who:empty { display: none; }
 
 .ticker__plate {
   display: flex;
@@ -760,7 +819,7 @@ body {
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
 }
 
-.ticker.is-flash .ticker__plate {
+.ticker__plate.is-flash {
   animation: ticker-flash 160ms steps(2, jump-end) 1;
 }
 
@@ -777,7 +836,7 @@ body {
   animation: blink 700ms steps(2, jump-none) infinite;
 }
 
-.ticker[data-error='true'] .ticker__dot {
+.ticker__plate[data-error='true'] .ticker__dot {
   background: var(--red);
 }
 
@@ -796,21 +855,21 @@ body {
 }
 
 /* Claude thinking, nothing to show yet: her violet, a slower pulse, the seconds counting up */
-.ticker[data-thinking='true'] .ticker__dot {
+.ticker__plate[data-thinking='true'] .ticker__dot {
   background: var(--violet);
   animation-duration: 1400ms;
 }
 
-.ticker[data-thinking='true'] .ticker__verb {
+.ticker__plate[data-thinking='true'] .ticker__verb {
   color: var(--paper);
 }
 
-.ticker[data-thinking='true'] .ticker__verb::after {
+.ticker__plate[data-thinking='true'] .ticker__verb::after {
   content: '…';
   letter-spacing: 0;
 }
 
-.ticker[data-thinking='true'] .ticker__target {
+.ticker__plate[data-thinking='true'] .ticker__target {
   font-variant-numeric: tabular-nums;
 }
 
@@ -820,7 +879,7 @@ body {
   .panel.is-entering .panel__frame,
   .panel.is-leaving .panel__frame,
   .panel__face img,
-  .ticker.is-flash .ticker__plate,
+  .ticker__plate.is-flash,
   .ticker__dot,
   .panel__line.is-streaming::after,
   .panel[data-kind='alert'] .panel__state {

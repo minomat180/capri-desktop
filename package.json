@@ -1,18 +1,20 @@
 {
   "name": "capri-desktop",
   "version": "0.3.1",
-  "description": "Capri, the Project Capricorn construct, living on your desktop and narrating what Claude Code is doing.",
+  "description": "Capri, the desktop companion who narrates what Claude Code is doing, ported to Linux (Wayland, mango) and macOS.",
   "author": "mochiiwuff",
-  "repository": "github:mochiiwuff/capri-desktop",
+  "repository": "github:minomat180/capri-desktop",
   "main": "src/main/main.js",
   "private": true,
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
+    "start": "linux/bin/capri",
+    "art": "node scripts/fetch-art.js",
     "demo": "node scripts/demo.js",
     "hooks:install": "node scripts/install-hooks.js",
     "hooks:uninstall": "node scripts/install-hooks.js --uninstall",
-    "dist": "electron-builder --win"
+    "electron:start": "electron .",
+    "electron:dev": "electron . --dev",
+    "electron:dist": "electron-builder --win"
   },
   "keywords": [
     "claude-code",
@@ -21,7 +23,7 @@
     "cyberpunk",
     "edgerunners"
   ],
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=20"
   },
@@ -60,5 +62,12 @@
       "shortcutName": "Capri",
       "artifactName": "Capri-Setup-${version}.${ext}"
     }
-  }
+  },
+  "optionalDependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
+  },
+  "contributors": [
+    "minomat180 (Linux and macOS ports)"
+  ]
 }
