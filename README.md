@@ -60,6 +60,11 @@ The ports keep upstream's renderer and replace everything under it:
 You need Node 20 or newer and [Claude Code](https://code.claude.com/docs/en/quickstart) installed
 and logged in.
 
+**Her art is not in this repository.** Capri's sprites, faces and icons are frames of the show and
+fan art that belong to their owners, so `node scripts/fetch-art.js` downloads them from upstream at
+a pinned commit and checks each file against the SHA-256 in [`assets/art.json`](assets/art.json).
+The service will not start without them.
+
 ### macOS
 
 Needs macOS 13 or newer and the Xcode command line tools to build the overlay app. The launcher
@@ -68,6 +73,7 @@ and `capri-ctl` are shared with Linux, which is why they live in `linux/bin/`.
 ```sh
 git clone https://github.com/minomat180/capri-desktop.git && cd capri-desktop
 npm install --omit=dev --ignore-scripts   # her two fonts and xterm.js; Electron is not needed
+node scripts/fetch-art.js                 # her art, from upstream (24 files, checked by hash)
 macos/shell/build.sh                      # builds macos/shell/Capri.app
 node scripts/install-hooks.js             # adds her hooks to ~/.claude/settings.json (with a backup)
 linux/bin/capri                           # logs to ~/.local/state/capri/capri.log
@@ -90,6 +96,7 @@ in mango.
 
 ```sh
 npm install --omit=dev --ignore-scripts
+node scripts/fetch-art.js
 node scripts/install-hooks.js
 linux/bin/capri                           # or: linux/bin/capri --foreground
 linux/bin/capri-ctl stow                  # bind this to a key in mango
@@ -110,6 +117,8 @@ SPOTIFY_CLIENT_SECRET`; macOS: read through the `agent-vault` helper the author 
 
 ```
 src/renderer/        her renderer, from upstream (kept close to it so upstream changes still merge)
+assets/art.json      where her art comes from: upstream commit and a SHA-256 per file
+scripts/fetch-art.js fetches it into assets/capri/ and assets/icons/ (both gitignored)
 hooks/capri-hook.js  the Claude Code hook: forwards a trimmed copy of each event, never blocks Claude
 linux/daemon/        the service: host API, agents, chat, apps, music, machine sensors
 linux/shell/         the GTK4 layer-shell overlay (Python)
@@ -138,9 +147,11 @@ Capri, her art and the original app: [mochiiwuff/capri-desktop](https://github.c
 The Linux and macOS ports: [minomat180](https://github.com/minomat180).
 
 Capri / Project Capricorn, Cyberpunk and Cyberpunk: Edgerunners belong to CD PROJEKT RED, Studio
-Trigger and Netflix. This is a non-commercial fan project with no affiliation. The character
-images in `assets/capri/` and `docs/` come from frames of the show, a fan-made cut-out and fan art,
-and are **not** covered by the code's license. If a rights holder wants them removed, open an issue.
+Trigger and Netflix. This is a non-commercial fan project with no affiliation. Her character art
+(frames of the show, a fan-made cut-out and fan art) belongs to its owners: it is **not** in this
+repository and not covered by its license. `scripts/fetch-art.js` fetches it from upstream, where
+it is published. The two screenshots in `docs/` show the art as the app draws it. If a rights
+holder wants anything removed, open an issue.
 
 The code is under the [PolyForm Noncommercial License 1.0.0](LICENSE), as upstream's is: free to
 use, change and share, never for sale. The upstream code this fork started from (0.3.1) was MIT,

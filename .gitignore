@@ -15,3 +15,7 @@ linux/tts/__pycache__/
 
 # the macOS overlay, built by macos/shell/build.sh
 macos/shell/Capri.app/
+
+# character art: not in the repo, fetched by scripts/fetch-art.js (manifest: assets/art.json)
+assets/capri/
+assets/icons/

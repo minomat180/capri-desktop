@@ -1,0 +1,31 @@
+{
+  "source": "https://github.com/mochiiwuff/capri-desktop",
+  "commit": "79a016c7921a460e14e053e33270180b89053f5c",
+  "note": "Capri's character art: frames of Cyberpunk: Edgerunners, a fan-made cut-out and fan art. Not part of this repository and not covered by its license. Fetched from upstream at the pinned commit by scripts/fetch-art.js and checked against these SHA-256 hashes.",
+  "files": {
+    "assets/capri/capri-cutout.png": "d2b505f3a649f7ded725835d7f33dc5402d4f3c3f867f313310e394ebec9b45d",
+    "assets/capri/capri-face.png": "56d2546d06ec389f46ab3bce265524e8f3fd46ea7b8a666b4886984e83a0bba0",
+    "assets/capri/capri-full.png": "7df28bdd6a264307d3a25bafaf12c2bba308d5aecd2dc03dcc9b176109f21aeb",
+    "assets/capri/cutin-eyes.png": "a0d6fb18b7a384f866d9151c859c0e8762328c933af785fb128c524e3ae36852",
+    "assets/capri/cutin-grin.png": "24b98c9f7e717aefb7855cd7b9532fec0bd24e29a1d15713408332d8ecdb3d65",
+    "assets/capri/cutin-laugh.png": "e856783445e411536e4d34a7622a83405f8b3d2da2786883a2146105a8f16496",
+    "assets/capri/cutin-look.png": "ec693184070926921e0f7b3b5d325a2acf4405bb05540ccc09ba97e297192f4e",
+    "assets/capri/cutin-many.png": "3e374eca7ab4d1d3401c3d5bc82499e20edd4ceb5029e868d4f55353d9f2e5a4",
+    "assets/capri/face-aside.png": "b559b2678ec42439fb2b2801dcffcc47c33bb6c48f33f97f31985609d51ba4d6",
+    "assets/capri/face-calm.png": "befe8f647c6d12058b3c710519ea49b5750502732d6e10c80a04b4d9f754c6b8",
+    "assets/capri/face-laugh.png": "89cbf307dee4421532fe02959a75fdce6322ad2dd1063b1cd5b4b5a22e32594f",
+    "assets/capri/face-look.png": "fe589f8a1ad8f8e5bdd3dd9bb9304a6da723e7678ca9cfc8d72eb4301ccbc9e5",
+    "assets/capri/face-many.png": "9263f26c5ffb45a7981b2c11bb348be6f4ca3bfbba787517da1f77d421145e09",
+    "assets/capri/face-smug.png": "37dec337c2825a63cf4697de04c57192a4f650d92697de2108c6928e74bf2299",
+    "assets/capri/face-wide.png": "56bd354b6df06202453b189c72c4f1cccd69b9dfb74628c014bd73a41c92371e",
+    "assets/capri/intro-grab.webp": "7cb83b4ee33583f7521f8ac8208b6e06417bef6bd59171ba4c478daf67443e6c",
+    "assets/capri/intro-mouth1.webp": "1a1196304c89becb408373ee14a1222a5e6eac13708832710ab25aafe4d217b1",
+    "assets/capri/intro-mouth2.webp": "222d41f2cb6a95aa41c3641eb26821d1bce4414b8e382bb41b7c30ab6f81dc19",
+    "assets/capri/intro-mouth3.webp": "2ba7ab5cf0f8b5c2b831e373fd3156e530ffc7f5963809b54d49b7d35a1e094c",
+    "assets/capri/intro-wave1.webp": "a43763f039ff83a2b791a8dfb0390d4c8b5fec0af731dc8fcff4dd63bbfe1879",
+    "assets/capri/intro-wave2.webp": "43775367e4dbfe5109427e5b062120f31249b753a772754ef71ccc888da61095",
+    "assets/icons/capri.ico": "d5fba323e157fb94293f168a37e6c0290b04aa6a3a99802599229718453ab8dc",
+    "assets/icons/capri.png": "406d60ff8646bc032e37234bce50bfc649f6fc7ba1a0a16158e6f22343bcd4c8",
+    "assets/icons/tray.png": "ee1c9ce6b629c0209c0a7c03f74a3d85d9f9c6628ec3af1ebe7e614af64547af"
+  }
+}

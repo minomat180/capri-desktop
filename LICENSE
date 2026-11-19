@@ -5,7 +5,8 @@ This repository is a fork of mochiiwuff/capri-desktop. It started from upstream 
 carries features ported from later upstream versions (petting, reminders, reacting to the
 computer), which upstream released under the PolyForm Noncommercial License 1.0.0. The fork as a
 whole, including the Linux and macOS ports, is distributed under those same terms below. The MIT
-notice for the earlier code is kept at the end of this file.
+notice for the earlier code is kept at the end of this file. The character artwork is not part
+of this repository; scripts/fetch-art.js fetches it from upstream.
 
 Upstream's own summary of its terms follows.
 

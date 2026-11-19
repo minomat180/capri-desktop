@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "start": "linux/bin/capri",
+    "art": "node scripts/fetch-art.js",
     "demo": "node scripts/demo.js",
     "hooks:install": "node scripts/install-hooks.js",
     "hooks:uninstall": "node scripts/install-hooks.js --uninstall",

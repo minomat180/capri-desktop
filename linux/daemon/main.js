@@ -35,6 +35,12 @@ const demoSteps = require('../../scripts/demo-sequence');
 const { TRAY } = require('../../src/main/labels');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+
+// Her art is not in the repository (it belongs to its rights holders): scripts/fetch-art.js gets it.
+if (!fs.existsSync(path.join(ROOT, 'assets', 'capri', 'capri-full.png'))) {
+  console.error('[capri] her art is missing: run `node scripts/fetch-art.js` first (see README).');
+  process.exit(1);
+}
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
 const DEV = process.argv.includes('--dev');
 const NO_SHELL = process.argv.includes('--no-shell'); // run the overlay yourself (debugging)
