@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-// Capri on Linux/mango: the service. Takes the agent events (Claude Code hooks, the pi
-// extension) on 127.0.0.1:47823/event like upstream's Electron app did, serves her renderer,
+// Capri on Linux/mango: the service. Takes the agent events (Claude Code hooks) on
+// 127.0.0.1:47823/event like upstream's Electron app did, serves her renderer,
 // gives it the `window.host` API over HTTP + server-sent events, watches mango (windows, focus,
 // pointer), and runs the overlay (linux/shell/capri-shell.py) as a child process.
 
@@ -21,7 +21,7 @@ const pc = require('./pc');
 const launch = require('./launch');
 const media = require('./media');
 const music = require('./music');
-const piChat = require('./pi-chat');
+const claudeChat = require('./claude-chat');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
@@ -55,9 +55,10 @@ function emit(channel, payload, kind = 'renderer') {
 }
 
 // ---------- vault approvals ----------
-// A vault extension (ipod_vault_use / vault_use) asks here as well as in its terminal; whichever
-// you answer first wins. Requests come over HTTP (anyone local could make one, and that's fine:
-// it only puts a question on screen). Answers do NOT: they only come from a real click in the
+// An agent's secret tool asks here (and may ask in its own dialog too); whichever you answer
+// first wins. No tool calls this since the pi vault extensions were removed (vault-approvals.md).
+// Requests come over HTTP (anyone local could make one, and that's fine: it only puts a question
+// on screen). Answers do NOT: they only come from a real click in the
 // overlay, through the shell's private pipe (fd 3) that only this process holds. So an agent can't
 // approve its own request with curl.
 const approvals = new Map(); // id -> { info, decision, waiters: [res], at }
@@ -217,8 +218,8 @@ const HOST = {
   chatStatus: async () => {
     const cfg = config.load();
     if (cfg.chatBackend !== 'ollama') {
-      if (!fs.existsSync(piChat.PI)) return { ok: false, error: 'nopi' };
-      return { ok: true, model: String(cfg.piModel || piChat.DEFAULT_MODEL).split('/').pop() };
+      if (!claudeChat.findClaude()) return { ok: false, error: 'noclaude' };
+      return { ok: true, model: String(cfg.claudeModel || claudeChat.DEFAULT_MODEL) };
     }
     const models = await refreshModels();
     const host = process.env.OLLAMA_HOST;
@@ -235,7 +236,7 @@ const HOST = {
       const onDelta = (piece) => emit('chat:delta', { id, text: piece });
       const text = cfg.chatBackend === 'ollama'
         ? await ollama.chat({ model: pickModel(), messages }, onDelta, abort.signal)
-        : await piChat.chat({ model: cfg.piModel || piChat.DEFAULT_MODEL, messages }, onDelta, abort.signal);
+        : await claudeChat.chat({ model: cfg.claudeModel || claudeChat.DEFAULT_MODEL, messages }, onDelta, abort.signal);
       return { ok: true, text };
     } catch (err) {
       return { ok: false, error: abort.signal.aborted ? 'stopped' : err.message };
@@ -394,7 +395,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && p === '/health') return send(res, 200, { ok: true, name: 'capri', pid: process.pid });
 
-  // agent events: hooks and the pi extension never send an Origin header, browsers always do
+  // agent events: hooks never send an Origin header, browsers always do
   // vault approvals: ask, wait for the answer (long poll), or withdraw (answered in the terminal)
   if (p === '/approval' && req.method === 'POST') {
     if (req.headers.origin) return send(res, 403, { ok: false });
@@ -431,7 +432,7 @@ const server = http.createServer(async (req, res) => {
     const a = approvals.get(am[1]);
     if (!a) return send(res, 404, { ok: false, error: 'unknown' });
     if (req.method === 'DELETE') {
-      approvalSettle(am[1], 'withdrawn', 'pi');
+      approvalSettle(am[1], 'withdrawn', 'agent');
       return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
