@@ -52,10 +52,10 @@ installer and its full feature list, go to [upstream](https://github.com/mochiiw
 
 <a id="platforms"></a>
 
-| Platform | Requires | Overlay | State |
-|:--|:--|:--|:--|
-| <img src="https://api.iconify.design/mdi/apple.svg?color=%238B949E" width="16" height="16">&nbsp;**macOS** | `13+`, Xcode command line tools | `NSPanel` + `WKWebView` (Swift) | In daily use |
-| <img src="https://api.iconify.design/mdi/linux.svg?color=%238B949E" width="16" height="16">&nbsp;**Linux** | mango `0.15+`, GTK 4, gtk4-layer-shell, WebKitGTK `6.0` | wlr-layer-shell surface + WebKitGTK (Python) | Built and used on a ThinkPad; no live install now |
+| Platform | Requires | Overlay |
+|:--|:--|:--|
+| <img src="https://api.iconify.design/mdi/apple.svg?color=%238B949E" width="16" height="16">&nbsp;**macOS** | `13+`, Xcode command line tools | `NSPanel` + `WKWebView` (Swift) |
+| <img src="https://api.iconify.design/mdi/linux.svg?color=%238B949E" width="16" height="16">&nbsp;**Linux** | mango `0.15+`, GTK 4, gtk4-layer-shell, WebKitGTK `6.0` | wlr-layer-shell surface + WebKitGTK (Python) |
 
 Both need Node `20+` and [Claude Code](https://code.claude.com/docs/en/quickstart), installed and
 logged in.
@@ -162,8 +162,8 @@ src/main/            upstream's Electron main process (Windows), unmaintained he
 
 ## Status and limits
 
-- A personal project. The macOS port is the one in daily use; the Linux port has no live install
-  right now.
+- A personal project. The macOS port is the one in daily use. The Linux port was built and used
+  on a ThinkPad running mango and has no live install right now.
 - English only; upstream's other four languages were dropped to keep the line set small.
 - Not ported from upstream on purpose: the bond system and evolving personality, custom personas,
   Codex and Antigravity support, upstream's own LLM layer, and its Windows system controls.
