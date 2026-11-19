@@ -4,8 +4,8 @@
 //
 // Playing: the Spotify app takes spotify: links over MPRIS (OpenUri), so
 // `playerctl -p spotify open spotify:track:<id>` (or :playlist:/:album:) starts it.
-// Finding: Spotify's Web API search, with mino's own developer app "glass-player" (client
-// credentials: it can search the public catalog, nothing about his account). Client ID is in
+// Finding: Spotify's Web API search, with a developer app of your own (client credentials:
+// it can search the public catalog, nothing about anyone's account). Client ID is in
 // config (spotifyClientId), the secret in the keyring (agent-vault, SPOTIFY_CLIENT_SECRET), read
 // with secret-tool, never written anywhere else. Since Feb 2026 dev-mode apps need the owner to
 // have Premium and return at most 10 results per search.

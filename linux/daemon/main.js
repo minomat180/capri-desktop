@@ -297,7 +297,7 @@ function runHooks(action, { quiet = false } = {}) {
 }
 
 // During the demo: a little terminal for her to sit on and take over. Floats where a mango
-// window rule puts it (app id capri-demo, see linux/README.md).
+// window rule puts it (app id capri-demo, see README.md, Linux).
 let demoTerm = null;
 function demoWindow(open) {
   // macOS: the overlay app puts up a window of its own that looks the part
@@ -592,7 +592,7 @@ function startShell() {
   const env = {
     ...process.env,
     GI_TYPELIB_PATH: [path.join(here, 'typelib'), process.env.GI_TYPELIB_PATH].filter(Boolean).join(':'),
-    LD_PRELOAD: ['/usr/lib/libgtk4-layer-shell.so.0', process.env.LD_PRELOAD].filter(Boolean).join(':'),
+    LD_PRELOAD: [process.env.CAPRI_LAYER_SHELL_LIB || '/usr/lib/libgtk4-layer-shell.so.0', process.env.LD_PRELOAD].filter(Boolean).join(':'),
   };
   delete env.ELECTRON_RUN_AS_NODE;
   const args = [path.join(here, 'capri-shell.py'), '--url', url];

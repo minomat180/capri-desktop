@@ -30,9 +30,9 @@ Last updated: 2026-11-19.
 
 ## Decided: wanted / not wanted
 
-Mino's call (2026-11-04) on upstream's newer features:
+The author's call (2026-11-04) on upstream's newer features:
 
-**Wanted** (being done on `feature/upstream-features`)
+**Wanted** (ported, now on `main`)
 - [x] **Pet her** — stroke her mane, she purrs. Ported without the bond system.
 - [x] **Reminders** — "remind me in 20 min to…"; she asks when if you didn't say, keeps them across
   restarts, and brings up ones that came due while she was off. Upstream's parser (English).
@@ -55,7 +55,7 @@ Mino's call (2026-11-04) on upstream's newer features:
 **On hold / open**
 - **Voice (TTS)**: built on `feature/voice` (Linux: Piper, then Kokoro `af_heart`, cached per
   line). Not merged into `main`; not on macOS.
-- Upstream merge — 67 commits ahead of our base (`79a016c`). Not merged. Conflicts expected in
+- Upstream merge: not merged. The fork is based on 0.3.1 (`79a016c`); upstream has moved on to 0.5.x. Conflicts expected in
   `lines.js`, `brain.js`, `chat.js` (we changed them a lot: English-only, `{agent}` placeholder).
 - **License:** upstream relicensed to PolyForm Noncommercial at 0.4.4. The ported features (pet,
   reminders, feels your PC) come from after that, so the fork as a whole is under PolyForm

@@ -18,21 +18,23 @@ through Claude Code. For the original Windows app, its installer and its full fe
 ## What she does
 
 - Takes Claude Code's hook events (sessions, prompts, tool calls, failures, subagents) and shows
-  one plate per busy agent over her head, up to three, labeled by project and red on a failure.
+  one plate per busy agent over her head, up to three, labeled by session when there is more than
+  one, with a red dot when a tool call fails.
 - Finds the window an agent runs in by walking up its process tree (through tmux if needed) and
   goes and sits on it.
 - Chats. Each message is one bare `claude -p` run with Claude Code's own login: no tools, no MCP
   servers, no settings files, so no API key passes through her and her own hook never fires on her
   chat. Haiku by default; Ollama is the other backend.
-- Opens and closes apps, controls Spotify and plays a song by name, keeps reminders, purrs when you
-  stroke her mane, and reacts to the machine: CPU load, battery, network, USB devices.
+- Opens and closes apps, controls Spotify and plays a song by name (see the note under "Run it"),
+  keeps reminders, purrs when you stroke her mane, and reacts to the machine: CPU load, battery,
+  network, USB devices.
 
 ## Why a port is more than a rebuild
 
 Upstream is an Electron app that leans on Windows: a transparent always-on-top window, and
-PowerShell to find out where the other windows are so she can sit on them. Neither exists in the
-same form on Wayland, where a client cannot see other windows or the global pointer, or on macOS
-without Electron.
+PowerShell to find out where the other windows are so she can sit on them. On Wayland a client
+cannot see other windows or the global pointer at all. On macOS, dropping Electron means a native
+overlay and `CGWindowList` in place of PowerShell.
 
 The ports keep upstream's renderer and replace everything under it:
 
@@ -47,10 +49,11 @@ The ports keep upstream's renderer and replace everything under it:
   (GTK4 + gtk4-layer-shell) and window positions, focus and the pointer come from mango's IPC. On
   macOS the overlay is a native `NSPanel` written in Swift (`macos/shell/main.swift`), windows come
   from `CGWindowList`, and battery, network and drives are pushed by the system instead of polled.
-- **A click an agent cannot fake.** The service has an approval API for an agent asking to use a
-  secret. An answer is accepted only from a real click in her panel, passed from the overlay to the
-  service over a private pipe (fd 3), never over HTTP, so an agent on the same machine cannot
-  approve itself. See [`linux/docs/vault-approvals.md`](linux/docs/vault-approvals.md).
+- **Approvals that do not go over HTTP.** The service has an approval API for an agent asking to
+  use a secret. An answer is accepted only from a click in her panel, passed from the overlay to
+  the service over a private pipe (fd 3), so an agent cannot approve its own request with an HTTP
+  call. Nothing calls this API at the moment: the agent tools that used it were removed with the
+  pi integration. See [`linux/docs/vault-approvals.md`](linux/docs/vault-approvals.md).
 
 ## Run it
 
@@ -59,7 +62,8 @@ and logged in.
 
 ### macOS
 
-Needs the Xcode command line tools to build the overlay app.
+Needs macOS 13 or newer and the Xcode command line tools to build the overlay app. The launcher
+and `capri-ctl` are shared with Linux, which is why they live in `linux/bin/`.
 
 ```sh
 git clone https://github.com/minomat180/capri-desktop.git && cd capri-desktop
@@ -76,8 +80,13 @@ each part differs from Linux: [`macos/README.md`](macos/README.md).
 ### Linux (mango)
 
 The Linux port is written for the [mango](https://github.com/mangowm/mango) Wayland
-compositor (0.15 or newer) and checks for it at start. It also needs GTK 4, gtk4-layer-shell, WebKitGTK 6.0 and
-PyGObject; `playerctl`, `rofi`, `foot`, `secret-tool` and `wl-copy` are used when present.
+compositor (0.15 or newer) and checks for it at start. It also needs GTK 4, gtk4-layer-shell,
+WebKitGTK 6.0, PyGObject with pycairo, and `curl` for `capri-ctl`; `playerctl`, `rofi`, `foot`,
+`gtk-launch`, `tmux`, `secret-tool` and `wl-copy` are used when present. gtk4-layer-shell is
+preloaded from `/usr/lib/libgtk4-layer-shell.so.0` (Arch's path); set `CAPRI_LAYER_SHELL_LIB`
+elsewhere. Its GObject typelib is vendored in `linux/shell/typelib/` for distributions that do not
+ship one. The demo opens a `foot` window with app id `capri-demo`; give it a floating window rule
+in mango.
 
 ```sh
 npm install --omit=dev --ignore-scripts
@@ -88,7 +97,14 @@ linux/bin/capri-ctl stow                  # bind this to a key in mango
 
 Restart open Claude Code sessions after installing the hooks; `node scripts/install-hooks.js --uninstall`
 removes them again. Settings for both ports live in `~/.config/capri/config.json`
-(`claudeModel`, `chatBackend`, `output`, `hotkey`, ...; defaults in `linux/daemon/config.js`).
+(`claudeModel`, `chatBackend`, `output`, ...; defaults in `linux/daemon/config.js`).
+
+Playing a song by name searches Spotify's Web API with a client-credentials app. Use your own
+Spotify developer app: put its id in `spotifyClientId` and store its secret as
+`SPOTIFY_CLIENT_SECRET` (Linux: `secret-tool store --label=spotify service agent-vault account
+SPOTIFY_CLIENT_SECRET`; macOS: read through the `agent-vault` helper the author uses, see
+`macos/daemon/music.js`). Without it she falls back to a slower web search, which needs
+`pip install ddgs`. Play, pause and skip work without any of this.
 
 ## Layout
 
@@ -99,7 +115,8 @@ linux/daemon/        the service: host API, agents, chat, apps, music, machine s
 linux/shell/         the GTK4 layer-shell overlay (Python)
 macos/shell/         the macOS overlay app (Swift) and its own xterm.js terminal
 macos/daemon/        macOS replacements for the Linux-only service modules
-src/main/            upstream's Electron main process (Windows), not maintained in this fork
+src/main/            upstream's Electron main process (Windows), unmaintained here; the
+                     service still uses its ollama.js and labels.js
 ```
 
 ## Status and limits
@@ -112,7 +129,7 @@ src/main/            upstream's Electron main process (Windows), not maintained 
 - No automated tests. The macOS app is signed ad hoc by `build.sh`, not notarized.
 - Local text-to-speech (Piper and Kokoro) exists on the `feature/voice` branch, Linux only, not
   merged.
-- Working notes, decisions and a survey of the other Capri projects:
+- Working notes, decisions and a survey of the other Capri projects (written for the author):
   [`linux/docs/STATUS.md`](linux/docs/STATUS.md).
 
 ## Credits and license
