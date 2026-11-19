@@ -70,11 +70,16 @@ function score(hit, query) {
 
 let token = null; // { value, until }
 
+// where the app's client secret comes from (macos/daemon/music.js swaps this for the keychain)
+const secrets = {
+  read: () => run('secret-tool', ['lookup', 'service', 'agent-vault', 'account', 'SPOTIFY_CLIENT_SECRET'], 5000),
+};
+
 async function apiToken() {
   if (token && Date.now() < token.until) return token.value;
   const id = config.load().spotifyClientId;
   if (!id) return null;
-  const secret = ((await run('secret-tool', ['lookup', 'service', 'agent-vault', 'account', 'SPOTIFY_CLIENT_SECRET'], 5000)) || '').trim();
+  const secret = ((await secrets.read()) || '').trim();
   if (!secret) return null;
   try {
     const res = await fetch('https://accounts.spotify.com/api/token', {
@@ -174,4 +179,4 @@ async function openSearch(query) {
   return { ok };
 }
 
-module.exports = { search, play, openSearch, parseTitle, score };
+module.exports = { search, play, openSearch, parseTitle, score, secrets };

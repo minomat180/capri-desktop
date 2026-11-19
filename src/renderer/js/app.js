@@ -47,7 +47,13 @@ async function boot() {
   });
   fx.resize(innerWidth, innerHeight);
   const chip = new Chip(document.getElementById('chip'));
-  chip.place(innerWidth, innerHeight);
+  // macOS: her icon in the menu bar is her chip (asked again when she's put away: icons move)
+  const findChip = async () => {
+    const tray = await host.trayPlace().catch(() => null);
+    if (tray?.chip) chip.foldInto(tray.icon);
+    chip.place(innerWidth, innerHeight);
+  };
+  await findChip();
   const mask = new Mask(document.getElementById('mask'));
 
   const voice = new Voice();
@@ -465,6 +471,7 @@ async function boot() {
         else if (typeof guide[cmd.topic] === 'function') guide.scene(() => guide[cmd.topic]());
         break;
       case 'stow': // Ctrl+Alt+C: into her biochip, or back out
+        if (cmd.on) findChip();
         if (cmd.on) capri.stow();
         else capri.unstow();
         break;

@@ -12,3 +12,6 @@ __pycache__/
 linux/tts/venv/
 linux/tts/voices/
 linux/tts/__pycache__/
+
+# the macOS overlay, built by macos/shell/build.sh
+macos/shell/Capri.app/
