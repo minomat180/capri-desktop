@@ -21,8 +21,8 @@
 
 <br>
 
-<img src="docs/capri-macos-greeting.png" alt="Capri on macOS as a Claude Code session starts: 'All of me is awake. Watching night-city-api.'" width="480">
-<img src="docs/capri-macos-activity.png" alt="Capri on macOS while Claude Code works: her panel shows the prompt and the tool calls so far" width="480">
+<img src="docs/capri-macos-greeting.png" alt="Capri on macOS as a Claude Code session starts: 'All of me is awake. Watching night-city-api.'" width="49%">
+<img src="docs/capri-macos-activity.png" alt="Capri on macOS while Claude Code works: her panel shows the prompt and the tool calls so far" width="49%">
 
 <sub>The macOS port running upstream's scripted demo session (<code>capri-ctl demo</code>): a session starts, then the prompt and Claude's first tool calls.</sub>
 
@@ -54,8 +54,8 @@ installer and its full feature list, go to [upstream](https://github.com/mochiiw
 
 | Platform | Requires | Overlay | State |
 |:--|:--|:--|:--|
-| <img src="https://api.iconify.design/mdi/apple.svg?color=%238B949E" width="16" height="16"> **macOS** | `13+`, Xcode command line tools | `NSPanel` + `WKWebView` (Swift) | In daily use |
-| <img src="https://api.iconify.design/mdi/linux.svg?color=%238B949E" width="16" height="16"> **Linux** | mango `0.15+`, GTK 4, gtk4-layer-shell, WebKitGTK `6.0` | wlr-layer-shell surface + WebKitGTK (Python) | Built and used on a ThinkPad; no live install now |
+| <img src="https://api.iconify.design/mdi/apple.svg?color=%238B949E" width="16" height="16">&nbsp;**macOS** | `13+`, Xcode command line tools | `NSPanel` + `WKWebView` (Swift) | In daily use |
+| <img src="https://api.iconify.design/mdi/linux.svg?color=%238B949E" width="16" height="16">&nbsp;**Linux** | mango `0.15+`, GTK 4, gtk4-layer-shell, WebKitGTK `6.0` | wlr-layer-shell surface + WebKitGTK (Python) | Built and used on a ThinkPad; no live install now |
 
 Both need Node `20+` and [Claude Code](https://code.claude.com/docs/en/quickstart), installed and
 logged in.
