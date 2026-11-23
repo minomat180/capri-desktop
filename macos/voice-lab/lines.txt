@@ -1,0 +1,12 @@
+# One line per clip. Taken from src/renderer/js/lines.js with the placeholders filled in.
+# Blank lines and lines starting with # are ignored.
+Link established. Hey, choom.
+Done! That's preem.
+Hey! Claude needs your permission.
+Bash flatlined. Claude will retry.
+No gig. Kinda bored.
+Someday I'll get up there.
+A controller! What are we playing?
+Only 12% battery left. Plug me in, choom.
+Look at that. We were on fire today.
+Claude fixed the login bug and the tests pass now, so you can push whenever you're ready.
