@@ -128,7 +128,7 @@ def main():
             engine = Mlx(args.voice, args.ref, ref_text, args.seed)
     except Exception as err:  # noqa: BLE001
         log(f"could not load {args.engine} {args.voice}: {err}")
-        print(json.dumps({"ready": False, "error": str(err)[:200]}), flush=True)
+        print(json.dumps({"ready": False, "error": str(err)[:400]}), flush=True)
         return 4
     log(f"loaded {args.engine}/{args.voice} in {time.time() - t0:.1f}s")
     print(json.dumps({"ready": True, "engine": args.engine, "voice": args.voice}), flush=True)
@@ -152,7 +152,7 @@ def main():
             print(json.dumps({"id": rid, "ok": True, "ms": round((time.time() - t1) * 1000),
                               "seconds": round(seconds, 2)}), flush=True)
         except Exception as err:  # noqa: BLE001
-            print(json.dumps({"id": rid, "ok": False, "error": str(err)[:200]}), flush=True)
+            print(json.dumps({"id": rid, "ok": False, "error": str(err)[:400]}), flush=True)
     return 0
 
 
