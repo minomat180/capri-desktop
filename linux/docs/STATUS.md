@@ -64,9 +64,25 @@ The author's call (2026-11-04) on upstream's newer features:
 - Waybar module showing her status.
 - Guide topics still describe Windows Explorer/tray in places.
 
-## Voice (TTS): researched 2026-11-04 (since built on `feature/voice`)
+## Voice (TTS): built 2026-11-04 on Linux; macOS 2026-11-23
 
-- **Recommended:** Piper, local, CPU. Now at `OHF-Voice/piper1-gpl` (the old `rhasspy/piper` is
+**Her voice is Kokoro af_heart** (mino picked it after listening; Piper's voices were rejected as
+flat). Off by default: `capri-ctl voice on|off|status|list|prerender|<voice>|say <text>`.
+
+- ~5 s a line on this CPU, so **every line is cached by its text** (`~/.cache/capri/voice/`), and
+  her 169 fixed lines are pre-rendered once (`capri-ctl voice prerender`, ~12 min). Cached = 0 ms.
+  Only new chat answers wait.
+- `linux/tts/tts-server.py` keeps the model warm (load ~5 s), started on her first line, not at boot.
+  `linux/daemon/voice.js` owns it; WAVs are served from `/voice/<engine-voice>/<hash>.wav` and played
+  through her existing Web Audio gain, so her mute/volume apply.
+- Piper is still there as `voiceEngine: 'piper'` (~0.7 s a line, flat).
+- Not in git: the venv and models (~650 MB). Setup in `linux/tts/README.md`.
+- **Still open:** she speaks panel lines and chat answers; nothing is spoken for the ticker.
+  No speech *input* (see `llymemg00/-Capri-voice-`'s `ear.js`).
+
+### Research notes (2026-11-04)
+
+- (Superseded by the above; kept for the numbers.) Piper, local, CPU. Now at `OHF-Voice/piper1-gpl` (the old `rhasspy/piper` is
   archived), **GPL-3.0**, `pip install piper-tts`, ~60 MB per voice.
   **Measured on a ThinkPad T480:** ~0.1–0.2 s per line *if the model stays loaded*; a cold CLI call is ~3 s,
   so it must run as one long-lived process, never spawn-per-line.
@@ -80,7 +96,13 @@ The author's call (2026-11-04) on upstream's newer features:
   static server (`.wav` MIME already mapped in `linux/daemon/main.js`) → renderer fetches and plays it
   through `voice.js`'s existing Web Audio `master` gain (reuses mute/volume; avoids WebKitGTK
   autoplay rules). Do **not** add an `<audio>` tag.
-- **Still open:** nobody has listened to any candidate voice. Pick one before building.
+- **VoiceStudio** (`debpalash/VoiceStudio`, AGPL-3.0, 100k★): bundles 17 engines + voice design,
+  OpenAI-compatible API on `localhost:3900`. Its good engines (OmniVoice, CosyVoice 3) need
+  8 GB+ VRAM = minomat, which is usually unplugged; for CPU it recommends the same small engines
+  we already tried. Default weights are CC-BY-NC. Parked, not installed.
+- **If better quality is ever wanted:** her fixed set is only 169 lines / ~6.4k characters, so it
+  fits ElevenLabs' free monthly tier in one pass, or could be rendered on minomat's GPU and cached
+  the same way. Quality then costs nothing at runtime.
 
 ## The other Capri projects (surveyed 2026-11-04)
 

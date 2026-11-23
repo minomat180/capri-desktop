@@ -26,6 +26,9 @@ const DEFAULTS = {
   spotifyClientId: '314167130a8b43a18fed103b9261f311', // the author's Spotify developer app; use your own id, the secret comes from the keyring
   pcReact: true,       // she reacts to this PC (pc.js): cpu, battery, network, usb, games
   reminders: [],       // the ones she keeps for you (reminders.js)
+  voice: false,        // she speaks her lines out loud (local, see linux/tts/)
+  voiceEngine: 'kokoro',
+  voiceModel: 'af_heart',
   chatModel: null,     // the Ollama model (null: the first one installed)
   ollamaHost: '127.0.0.1:11434', // Ollama's default address
 };
