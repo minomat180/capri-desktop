@@ -73,6 +73,7 @@ async function boot() {
     fx,
     voice,
   });
+  voice.quiet = () => capri.stowed || capri.hidden; // put away = silent
   capri.wander = config.wander;
   capri.possessWindows = config.possess;
   capri.setScale(config.scale);
