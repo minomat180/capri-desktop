@@ -131,7 +131,7 @@ function updateConfig(patch) {
   const cfg = rendererConfig();
   emit('capri:config', cfg);
   if ('visible' in patch) publishStatus({ visible: cfg.visible });
-  // her voice off, or a different engine or model: let the loaded one go (macOS: it holds 22-28 GB)
+  // her voice off, or a different engine or model: let the loaded one go (macOS: it holds ~16-35 GB)
   if (patch.voice === false || ['voiceEngine', 'voiceModel', 'voiceRef', 'voiceMlxModel'].some((k) => k in patch)) speech.stop();
   return cfg;
 }

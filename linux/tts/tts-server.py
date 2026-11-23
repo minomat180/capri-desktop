@@ -7,8 +7,8 @@ Three engines, same protocol:
           pre-rendered by `capri-ctl voice prerender`.
   piper   Piper (GPL-3.0, separate process, never linked in). ~0.7 s a line, flatter.
   mlx     Any mlx-audio model on Apple Silicon (macOS), cloned from a reference clip. Hers is
-          Fish Audio Drama 3 (4-bit) with the "drift" clip: ~1.4 s a line on an M5 Pro, about
-          22-28 GB of memory while loaded (see macos/voice/).
+          Fish Audio Drama 3 (4-bit) with the "drift" clip: ~1-1.5 s a line on an M5 Pro, about
+          16 GB resident and up to 35 GB with GPU buffers while loaded (see macos/voice/).
 
 Loading the model costs 4-11 s, so this process stays up: the Capri service writes one JSON
 request per line on stdin and reads one JSON reply per line on stdout.

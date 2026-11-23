@@ -69,8 +69,8 @@ The author's call (2026-11-04) on upstream's newer features:
 **On macOS her voice is Fish Audio Drama 3 (4-bit) cloned from the "drift" clip** (mino picked
 both by ear on 2026-11-23 from the voice lab, `macos/voice-lab/`: 366 clips from Kokoro, Phonon,
 Qwen3-TTS, Ming-3.0 and Fish). "drift" is a voice Qwen3-TTS designed from a text description (soft,
-airy, dreamy young woman), not a real person's. ~1.4 s a line on the M5 Pro, but 22-28 GB of memory
-while loaded, so the model is let go after `voiceIdleMinutes` (10) without a line, and a passing line
+airy, dreamy young woman), not a real person's. ~1-1.5 s a line on the M5 Pro, but ~16 GB resident (35 GB peak
+with GPU buffers) while loaded, so the model is let go after `voiceIdleMinutes` (10) without a line, and a passing line
 that would wait for it to load is skipped (chat answers wait). Setup: `macos/voice/setup.sh`.
 
 **On Linux her voice is Kokoro af_heart** (mino picked it after listening; Piper's voices were

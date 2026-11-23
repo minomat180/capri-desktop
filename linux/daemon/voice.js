@@ -8,7 +8,7 @@
 //   Linux  Kokoro (af_heart) through kokoro-onnx, ~5 s a line on the old laptop's CPU (or Piper).
 //   macOS  Fish Audio Drama 3 (4-bit) through mlx-audio, cloned from the "drift" clip (a voice
 //          designed from a text description with Qwen3-TTS, not a real person's): ~1.4 s a line
-//          on an M5 Pro, but 22-28 GB of memory while loaded. So the model is let go after
+//          on an M5 Pro, but ~16 GB resident and up to ~35 GB with its GPU buffers while loaded. So the model is let go after
 //          `voiceIdleMinutes` without a line, and a line that would have to wait for it to load
 //          is skipped instead of said late (her chat answers still wait). Setup: macos/voice/.
 //
@@ -110,7 +110,7 @@ function stop() {
   starting = false;
 }
 
-// Let the model go after a while without a line (macOS: it holds 22-28 GB).
+// Let the model go after a while without a line (macOS: it holds ~16-35 GB).
 function idle() {
   clearTimeout(idleTimer);
   const { idleMs } = cfg();
@@ -141,7 +141,10 @@ function start() {
     } else {
       args = ['--engine', c.engine, '--voice', c.engine === 'kokoro' ? c.voice : path.join(VOICES, `${path.basename(c.voice)}.onnx`)];
     }
-    child = spawn(py, [SERVER, ...args], { stdio: ['pipe', 'pipe', 'pipe'], cwd: os.tmpdir() });
+    // mlx: the model is fetched once by macos/voice/setup.sh; offline here, so a missing one fails
+    // at once instead of quietly downloading 22 GB until the load times out
+    const env = c.engine === 'mlx' ? { ...process.env, HF_HUB_OFFLINE: '1' } : process.env;
+    child = spawn(py, [SERVER, ...args], { stdio: ['pipe', 'pipe', 'pipe'], cwd: os.tmpdir(), env });
     let settled = false;
     let loadTimer = null;
     const done = (ok) => { if (!settled) { settled = true; clearTimeout(loadTimer); starting = false; loaded = ok; resolve(ok); if (ok) idle(); } };

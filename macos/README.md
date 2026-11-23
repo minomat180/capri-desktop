@@ -82,10 +82,11 @@ capri-ctl voice on              # off | status | list | <clip> | say "..." | pre
 capri-ctl voice prerender       # her fixed lines, made once (~5 min), then instant
 ```
 
-- About 1.4 s a line on an M5 Pro. Every line is cached by its text (`~/.cache/capri/voice/`),
+- About 1-1.5 s a line on an M5 Pro (a 5 s chat answer: 3.7 s). Every line is cached by its text (`~/.cache/capri/voice/`),
   so repeats and pre-rendered lines play at once.
-- While loaded the model holds 22-28 GB. It loads on her first line and is let go after
-  `voiceIdleMinutes` (10) without one. A passing line that would have to wait for the load is
+- While loaded the model holds about 16 GB, up to 35 GB at peak with its GPU buffers (measured on
+  the M5 Pro). It loads in 10-20 s on her first line and is let go after `voiceIdleMinutes` (10)
+  without one. It never downloads at run time: `setup.sh` fetches it once. A passing line that would have to wait for the load is
   skipped, not said late; her chat answers wait.
 - Other clips: `macos/voice/setup.sh --name <name> --ref <clip.wav> --text "<its transcript>"`,
   then `capri-ctl voice <name>`. Another mlx-audio model: `voiceMlxModel` in her config.
