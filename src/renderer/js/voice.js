@@ -61,10 +61,10 @@ export class Voice {
     }
   }
 
-  // Her voice (Linux): a line spoken by the local model, played through the same gain as her
+  // Her voice: a line spoken by the local model, played through the same gain as her
   // blips, so her volume and mute apply. One line at a time: a new one cuts off the last.
   async speak(url) {
-    if (this.muted || !url) return 0;
+    if (this.muted || this.quiet?.() || !url) return 0;
     const ctx = this.ensure();
     if (ctx.state === 'suspended') await ctx.resume();
     try {

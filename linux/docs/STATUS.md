@@ -5,7 +5,7 @@ Last updated: 2026-11-19.
 
 - **Repo:** `github.com/minomat180/capri-desktop`, a fork of `mochiiwuff/capri-desktop`.
 - **Branch:** `main` holds both ports. New work gets its own `feature/<topic>` branch; local
-  text-to-speech is on `feature/voice`, not merged.
+  text-to-speech is on `feature/voice-mac` (Linux Kokoro and macOS Fish), not merged yet.
 - **Run:** Linux: started by mango's autostart. macOS: `macos/README.md`. Both:
   `capri-ctl {show|hide|stow|chat|menu|quit|...}`, logs `~/.local/state/capri/capri.log`, config
   `~/.config/capri/config.json`.
@@ -53,8 +53,8 @@ The author's call (2026-11-04) on upstream's newer features:
 - `system.js` — Windows-only PC control (settings, power, snip). Would be a full rewrite; not asked for.
 
 **On hold / open**
-- **Voice (TTS)**: built on `feature/voice` (Linux: Piper, then Kokoro `af_heart`, cached per
-  line). Not merged into `main`; not on macOS.
+- **Voice (TTS)**: Linux Kokoro `af_heart`, macOS Fish Audio Drama 3 with the "drift" clip, on
+  `feature/voice-mac`; see the section below.
 - Upstream merge: not merged. The fork is based on 0.3.1 (`79a016c`); upstream has moved on to 0.5.x. Conflicts expected in
   `lines.js`, `brain.js`, `chat.js` (we changed them a lot: English-only, `{agent}` placeholder).
 - **License:** upstream relicensed to PolyForm Noncommercial at 0.4.4. The ported features (pet,
@@ -66,8 +66,15 @@ The author's call (2026-11-04) on upstream's newer features:
 
 ## Voice (TTS): built 2026-11-04 on Linux; macOS 2026-11-23
 
-**Her voice is Kokoro af_heart** (mino picked it after listening; Piper's voices were rejected as
-flat). Off by default: `capri-ctl voice on|off|status|list|prerender|<voice>|say <text>`.
+**On macOS her voice is Fish Audio Drama 3 (4-bit) cloned from the "drift" clip** (mino picked
+both by ear on 2026-11-23 from the voice lab, `macos/voice-lab/`: 366 clips from Kokoro, Phonon,
+Qwen3-TTS, Ming-3.0 and Fish). "drift" is a voice Qwen3-TTS designed from a text description (soft,
+airy, dreamy young woman), not a real person's. ~1.4 s a line on the M5 Pro, but 22-28 GB of memory
+while loaded, so the model is let go after `voiceIdleMinutes` (10) without a line, and a passing line
+that would wait for it to load is skipped (chat answers wait). Setup: `macos/voice/setup.sh`.
+
+**On Linux her voice is Kokoro af_heart** (mino picked it after listening; Piper's voices were
+rejected as flat). Off by default on both: `capri-ctl voice on|off|status|list|prerender|<voice>|say <text>`.
 
 - ~5 s a line on this CPU, so **every line is cached by its text** (`~/.cache/capri/voice/`), and
   her 169 fixed lines are pre-rendered once (`capri-ctl voice prerender`, ~12 min). Cached = 0 ms.
@@ -76,7 +83,8 @@ flat). Off by default: `capri-ctl voice on|off|status|list|prerender|<voice>|say
   `linux/daemon/voice.js` owns it; WAVs are served from `/voice/<engine-voice>/<hash>.wav` and played
   through her existing Web Audio gain, so her mute/volume apply.
 - Piper is still there as `voiceEngine: 'piper'` (~0.7 s a line, flat).
-- Not in git: the venv and models (~650 MB). Setup in `linux/tts/README.md`.
+- Not in git: the venv and models (Linux ~650 MB, `linux/tts/README.md`; macOS ~23 GB plus the
+  reference clip, `macos/voice/setup.sh`).
 - **Still open:** she speaks panel lines and chat answers; nothing is spoken for the ticker.
   No speech *input* (see `llymemg00/-Capri-voice-`'s `ear.js`).
 

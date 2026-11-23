@@ -219,10 +219,10 @@ export class Chat {
     });
   }
 
-  // Her answer out loud, once it's whole (Linux; nothing happens if her voice is off).
+  // Her answer out loud, once it's whole (nothing happens if her voice is off).
   async speak(text) {
     if (!this.host.speak) return;
-    const said = await this.host.speak(text).catch(() => null);
+    const said = await this.host.speak({ text, kind: 'chat' }).catch(() => null);
     if (said?.url && this.open) this.voice.speak(said.url);
   }
 

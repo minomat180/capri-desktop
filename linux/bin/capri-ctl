@@ -21,7 +21,7 @@ case "$cmd" in
       off)    host setConfig '{"voice":false}' >/dev/null && echo "her voice is off" ;;
       prerender) host prerender null; echo; echo "making her fixed lines; watch: capri-ctl voice status" ;;
       say)    shift 2; host speak "$(printf '%s' "$*" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"; echo ;;
-      *)      host setConfig "{\"voiceModel\":\"$2\",\"voice\":true}" >/dev/null && echo "her voice: $2" ;;
+      *)      host setVoice "\"$2\"" >/dev/null && echo "her voice: $2" ;;
     esac ;;
   watch)
     [ -n "$token" ] || { echo '{"text":"","class":"off"}'; exit 1; }

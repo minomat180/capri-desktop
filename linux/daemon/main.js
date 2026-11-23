@@ -131,6 +131,8 @@ function updateConfig(patch) {
   const cfg = rendererConfig();
   emit('capri:config', cfg);
   if ('visible' in patch) publishStatus({ visible: cfg.visible });
+  // her voice off, or a different engine or model: let the loaded one go (macOS: it holds 22-28 GB)
+  if (patch.voice === false || ['voiceEngine', 'voiceModel', 'voiceRef', 'voiceMlxModel'].some((k) => k in patch)) speech.stop();
   return cfg;
 }
 
@@ -308,9 +310,10 @@ const HOST = {
     : music.search(String(arg || '').slice(0, 200))),
   musicPlay: (uri) => music.play(String(uri)),
   musicOpenSearch: (query) => music.openSearch(String(query || '')),
-  speak: (text) => speech.say(text),
+  speak: (arg) => (arg && typeof arg === 'object' ? speech.say(arg.text, { kind: arg.kind }) : speech.say(arg)),
   voiceStatus: () => speech.status(),
   voices: () => speech.voices(),
+  setVoice: (id) => { speech.stop(); return updateConfig({ ...speech.pick(id), voice: true }); },
   prerender: () => {
     if (prerendering) return { ok: false, error: 'already running' };
     prerendering = true;
@@ -682,6 +685,7 @@ function shutdown() {
   stopping = true;
   clearTimeout(cursorTimer);
   desktop.stop();
+  speech.stop(); // let her voice model go with her
   demoWindow(false);
   if (shell) shell.kill('SIGTERM');
   for (const s of streams) s.res.end();
