@@ -23,6 +23,10 @@ a line to hear every voice say it; star voices, add notes, "Copy picks" puts bot
 | `ming` | Ming-3.0 TTS 0.5B | 3 built-in voices and one description; also tag lines like `[Laughter]` |
 | `fish` | Fish Audio Drama 3, 4-bit | the 4 designed voices, cloned; also tag lines (about 22 GB download, 26 GB peak memory) |
 
+First run on an M5 Pro (48 GB), 2026-11-23, model warm, median per line: Kokoro 0.07 s, Phonon 0.33 s,
+Qwen design 1.05 s, Qwen clone 1.7B 1.33 s / 0.6B 1.12 s, Ming 0.79 s, Fish 1.37 s (peak 28.4 GB).
+All models together take about 35 GB in `~/.cache/huggingface` (Fish alone 22 GB).
+
 Options: `--only kokoro,phonon`, `--skip fish`, `--redo` (re-run finished groups), `--page-only`.
 Models load one at a time. Re-running with the same `--out` picks up where it stopped. The clips,
 venv and models stay out of the repo (`~/.local/share/capri/voice-lab`, `~/.cache/huggingface`).
