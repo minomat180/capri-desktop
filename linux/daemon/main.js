@@ -29,6 +29,7 @@ const launch = platform('launch');
 const media = platform('media');
 const music = platform('music');
 const claudeChat = require('./claude-chat');
+const speech = require('./voice');
 const ollama = require('../../src/main/ollama');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
@@ -130,6 +131,8 @@ function updateConfig(patch) {
   const cfg = rendererConfig();
   emit('capri:config', cfg);
   if ('visible' in patch) publishStatus({ visible: cfg.visible });
+  // her voice off, or a different engine or model: let the loaded one go (macOS: it holds ~16-35 GB)
+  if (patch.voice === false || ['voiceEngine', 'voiceModel', 'voiceRef', 'voiceMlxModel'].some((k) => k in patch)) speech.stop();
   return cfg;
 }
 
@@ -216,6 +219,26 @@ const openPath = (p) => spawn(MAC ? '/usr/bin/open' : 'xdg-open', [p], { detache
 
 const appInfo = (app) => app && { name: app.process, label: app.name };
 
+let prerendering = false;
+
+// Every fixed thing she can say (src/renderer/js/lines.js), for pre-rendering her voice.
+function fixedLines() {
+  const out = new Set();
+  const walk = (v) => {
+    if (typeof v === 'string') { const t = v.trim(); if (t && !t.includes('{') && t.length > 1) out.add(t); }
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  try {
+    const src = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'js', 'lines.js'), 'utf8');
+    // the file is an ES module; read it as data rather than importing it into the service
+    walk(JSON.parse(JSON.stringify(eval(`(${src.replace(/^export const LINES =/m, '').replace(/;\s*$/, '')})`))));
+  } catch (err) {
+    log(`could not read her lines: ${err.message}`);
+  }
+  return [...out];
+}
+
 const HOST = {
   getConfig: () => rendererConfig(),
   setConfig: (patch) => updateConfig(patch || {}),
@@ -287,6 +310,20 @@ const HOST = {
     : music.search(String(arg || '').slice(0, 200))),
   musicPlay: (uri) => music.play(String(uri)),
   musicOpenSearch: (query) => music.openSearch(String(query || '')),
+  speak: (arg) => (arg && typeof arg === 'object' ? speech.say(arg.text, { kind: arg.kind }) : speech.say(arg)),
+  voiceStatus: () => speech.status(),
+  voices: () => speech.voices(),
+  setVoice: (id) => { speech.stop(); return updateConfig({ ...speech.pick(id), voice: true }); },
+  prerender: () => {
+    if (prerendering) return { ok: false, error: 'already running' };
+    prerendering = true;
+    const lines = fixedLines();
+    speech.prerender(lines, (done, total) => emit('voice:prerender', { done, total }))
+      .then((r) => log(`prerender: ${r.made} made, ${r.had} already there, ${r.total} lines`))
+      .catch((err) => log(`prerender failed: ${err.message}`))
+      .finally(() => { prerendering = false; });
+    return { ok: true, lines: lines.length };
+  },
   closeApp: ({ name, force }) => apps.close(name, { force: Boolean(force) }).catch((err) => ({ error: err.message })),
 };
 
@@ -500,6 +537,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // her spoken lines (linux/daemon/voice.js), cached under ~/.cache/capri, not in the repo
+  if (req.method === 'GET' && p.startsWith('/voice/')) {
+    const [, , dir, name] = p.split('/');
+    const file = speech.filePath(dir || '', name || '');
+    if (!file) return send(res, 404, { ok: false });
+    res.writeHead(200, { 'content-type': 'audio/wav', 'cache-control': 'no-store' });
+    return fs.createReadStream(file).pipe(res);
+  }
+
   if (req.method === 'GET' && p.startsWith('/app/')) return serveFile(res, decodeURIComponent(p.slice(5)));
   if (req.method === 'GET' && p.startsWith('/usersounds/')) {
     return serveFile(res, decodeURIComponent(p.slice(12)), SOUNDS_DIR, ['']);
@@ -639,6 +685,7 @@ function shutdown() {
   stopping = true;
   clearTimeout(cursorTimer);
   desktop.stop();
+  speech.stop(); // let her voice model go with her
   demoWindow(false);
   if (shell) shell.kill('SIGTERM');
   for (const s of streams) s.res.end();

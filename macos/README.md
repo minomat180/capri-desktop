@@ -70,6 +70,24 @@ a pipe that only the two of them hold.
 - Nothing else. Window positions and the pointer need no permission; she never reads window
   titles or the screen.
 
-## Not there yet
+## Her voice
 
-- Voice (on the `feature/voice` branch, Linux only).
+She can say her lines out loud, locally: **Fish Audio Drama 3** (4-bit, through
+[mlx-audio](https://github.com/Blaizzy/mlx-audio)) cloned from the **drift** clip, a voice designed
+from a text description in the voice lab (`macos/voice-lab/`). Off by default.
+
+```sh
+macos/voice/setup.sh            # venv, the model (~22 GB, once), the drift clip from the voice lab
+capri-ctl voice on              # off | status | list | <clip> | say "..." | prerender
+capri-ctl voice prerender       # her fixed lines, made once (~5 min), then instant
+```
+
+- About 1-1.5 s a line on an M5 Pro (a 5 s chat answer: 3.7 s). Every line is cached by its text (`~/.cache/capri/voice/`),
+  so repeats and pre-rendered lines play at once.
+- While loaded the model holds about 16 GB, up to 35 GB at peak with its GPU buffers (measured on
+  the M5 Pro). It loads in 10-20 s on her first line and is let go after `voiceIdleMinutes` (10)
+  without one. It never downloads at run time: `setup.sh` fetches it once. A passing line that would have to wait for the load is
+  skipped, not said late; her chat answers wait.
+- Other clips: `macos/voice/setup.sh --name <name> --ref <clip.wav> --text "<its transcript>"`,
+  then `capri-ctl voice <name>`. Another mlx-audio model: `voiceMlxModel` in her config.
+- Played through her own volume and mute, and silent while she's put away.

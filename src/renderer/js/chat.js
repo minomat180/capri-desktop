@@ -161,6 +161,7 @@ export class Chat {
     }
     const answer = clean(res.text) || '…';
     this.history.push({ role: 'assistant', content: answer });
+    this.speak(answer);
     if (reminder) this.showReminder(reminder, answer);
     this.panel.stream(answer, { done: true });
     this.panel.setFace(mood(answer));
@@ -216,6 +217,13 @@ export class Chat {
       this.panel.setActions([]);
       this.panel.stream(`${answer}\n${t.cancelled}`, { done: true });
     });
+  }
+
+  // Her answer out loud, once it's whole (nothing happens if her voice is off).
+  async speak(text) {
+    if (!this.host.speak) return;
+    const said = await this.host.speak({ text, kind: 'chat' }).catch(() => null);
+    if (said?.url && this.open) this.voice.speak(said.url);
   }
 
   listApps() {

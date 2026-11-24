@@ -9,6 +9,7 @@ const path = require('node:path');
 
 const DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'capri');
 const FILE = path.join(DIR, 'config.json');
+const MAC = process.platform === 'darwin';
 
 const DEFAULTS = {
   scale: 0.6,
@@ -26,6 +27,12 @@ const DEFAULTS = {
   spotifyClientId: '314167130a8b43a18fed103b9261f311', // the author's Spotify developer app; use your own id, the secret comes from the keyring
   pcReact: true,       // she reacts to this PC (pc.js): cpu, battery, network, usb, games
   reminders: [],       // the ones she keeps for you (reminders.js)
+  voice: false,        // she speaks her lines out loud (local: linux/tts/, macos/voice/)
+  voiceEngine: MAC ? 'mlx' : 'kokoro',
+  voiceModel: 'af_heart', // the Kokoro voice, or a Piper model
+  voiceRef: 'drift',   // mlx: the reference clip she is cloned from (macos/voice/)
+  voiceMlxModel: 'mlx-community/fish-audio-drama-3-4bit',
+  voiceIdleMinutes: MAC ? 10 : 0, // let the model go after this long without a line (0: never)
   chatModel: null,     // the Ollama model (null: the first one installed)
   ollamaHost: '127.0.0.1:11434', // Ollama's default address
 };

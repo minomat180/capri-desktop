@@ -3,12 +3,26 @@
 #   capri-ctl stow|show|hide|menu|status|teleport|satellite|demo|report|chat|quit
 #   capri-ctl watch     stream her state as JSON lines (for the waybar module)
 #   capri-ctl running   exit 0 if she's up
+#   capri-ctl voice [on|off|status|list|prerender|<voice-id>|say <text>]
 dir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/capri   # macOS has no XDG_RUNTIME_DIR: its per-user TMPDIR
 port=$(cat "$dir/port" 2>/dev/null || echo 47823)
 token=$(cat "$dir/token" 2>/dev/null)
 cmd=${1:-status}
 case "$cmd" in
   running) curl -sf "http://127.0.0.1:$port/health" >/dev/null ;;
+  voice)
+    [ -n "$token" ] || { echo "capri is not running" >&2; exit 1; }
+    host() { curl -sf -X POST -H "x-capri-token: $token" -H 'content-type: application/json' \
+               -d "{\"arg\":$2}" "http://127.0.0.1:$port/host/call/$1"; }
+    case "${2:-status}" in
+      status) host voiceStatus null; echo ;;
+      list)   host voices null | tr ',' '\n' | sed -n 's/.*"id":"\([^"]*\)".*/  \1/p' ;;
+      on)     host setConfig '{"voice":true}' >/dev/null && echo "her voice is on" ;;
+      off)    host setConfig '{"voice":false}' >/dev/null && echo "her voice is off" ;;
+      prerender) host prerender null; echo; echo "making her fixed lines; watch: capri-ctl voice status" ;;
+      say)    shift 2; host speak "$(printf '%s' "$*" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"; echo ;;
+      *)      host setVoice "\"$2\"" >/dev/null && echo "her voice: $2" ;;
+    esac ;;
   watch)
     [ -n "$token" ] || { echo '{"text":"","class":"off"}'; exit 1; }
     curl -sN -H "x-capri-token: $token" "http://127.0.0.1:$port/status/stream" | sed -un 's/^data: //p' ;;
